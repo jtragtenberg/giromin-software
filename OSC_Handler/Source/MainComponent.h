@@ -25,11 +25,15 @@ public:
 
 private:
     //==============================================================================
-    // Your private member variables go here...
+    juce::Slider    rotaryKnob;
 
-    juce::Slider rotaryKnob;
-    
+    juce::TextButton oscModeBtn  { "OSC" };
+    juce::TextButton midiModeBtn { "MIDI" };
+    juce::ComboBox   midiInputSelector;
+
     GirominController giromin_controller_;
+
+    void updateModeButtons();
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
 };

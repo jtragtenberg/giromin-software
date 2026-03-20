@@ -12,52 +12,112 @@
 
 #include <JuceHeader.h>
 
-class MidiHandler
+class MidiHandler : public juce::MidiInputCallback
 {
 public:
+    // Callback invocado pelo GirominController para cada CC recebido
+    std::function<void(int channel, int cc, int value)> midiCCCallback;
+
     MidiHandler()
     {
-        // check if any midi devices
-        if (juce::MidiOutput::getAvailableDevices().isEmpty())
-        {
-            std::cout << "no midi devices found" << std::endl;
-            
-            // exit early if no midi devices were found
-            return;
-        }
-        
-        // store available midi output devices
+        // ── MIDI Output ──────────────────────────────────────────────────────
         auto midiOutputs = juce::MidiOutput::getAvailableDevices();
-        if (!midiOutputs.isEmpty())
+        if (midiOutputs.isEmpty())
         {
-            // output names of avaiable midi devices
-            for (const auto& midiOutput : midiOutputs)
-            {
-                std::cout << "MIDI Output Device: " << midiOutput.name << " (" << midiOutput.identifier << ")" << std::endl;
-            }
-            // fetch first available midiOutput device
-            auto midiOutput = midiOutputs[0];
-            midiOutputDevice = juce::MidiOutput::openDevice(midiOutput.identifier);
-            
-            // console out the name of the first open midi device
+            std::cout << "no MIDI output devices found" << std::endl;
+        }
+        else
+        {
+            for (const auto& d : midiOutputs)
+                std::cout << "MIDI Output: " << d.name << " (" << d.identifier << ")" << std::endl;
+
+            auto outDev = findDeviceByName (midiOutputs, "IAC Driver Bus 1");
+            midiOutputDevice = juce::MidiOutput::openDevice(outDev.identifier);
             if (midiOutputDevice != nullptr)
+                DBG("MIDI output opened: " + outDev.name);
+            else
+                DBG("Failed to open MIDI output: " + outDev.name);
+        }
+
+        // ── MIDI Input ───────────────────────────────────────────────────────
+        auto midiInputs = juce::MidiInput::getAvailableDevices();
+        if (midiInputs.isEmpty())
+        {
+            std::cout << "no MIDI input devices found" << std::endl;
+        }
+        else
+        {
+            for (const auto& d : midiInputs)
+                std::cout << "MIDI Input: " << d.name << " (" << d.identifier << ")" << std::endl;
+
+            auto inDev = findDeviceByName (midiInputs, "Teensy MIDI Port 1");
+            midiInputDevice = juce::MidiInput::openDevice(inDev.identifier, this);
+            if (midiInputDevice != nullptr)
             {
-                DBG("MIDI output device opened: " + midiOutput.name);
+                DBG("MIDI input opened: " + inDev.name);
+                midiInputDevice->start();
             }
             else
             {
-                DBG("Failed to open MIDI output device: " + midiOutput.name);
+                DBG("Failed to open MIDI input: " + inDev.name);
             }
         }
     }
-    ~MidiHandler() {}
-    
+
+    ~MidiHandler()
+    {
+        if (midiInputDevice != nullptr)
+            midiInputDevice->stop();
+    }
+
+    // ── Output ───────────────────────────────────────────────────────────────
     void outputMidiMessage (const int midi_ch, const int midi_cc, const int midi_cc_value)
     {
-        juce::MidiMessage midi_cc_message = juce::MidiMessage::controllerEvent (midi_ch, midi_cc, midi_cc_value);
-        midiOutputDevice->sendMessageNow (midi_cc_message);
+        if (midiOutputDevice != nullptr)
+        {
+            juce::MidiMessage msg = juce::MidiMessage::controllerEvent(midi_ch, midi_cc, midi_cc_value);
+            midiOutputDevice->sendMessageNow(msg);
+        }
     }
-    
+
+    // ── Lista de dispositivos input disponíveis ───────────────────────────────
+    juce::Array<juce::MidiDeviceInfo> getAvailableInputDevices() const
+    {
+        return juce::MidiInput::getAvailableDevices();
+    }
+
+    // Abre um dispositivo input pelo identifier
+    void openInputDevice (const juce::String& identifier)
+    {
+        if (midiInputDevice != nullptr)
+            midiInputDevice->stop();
+
+        midiInputDevice = juce::MidiInput::openDevice(identifier, this);
+        if (midiInputDevice != nullptr)
+        {
+            DBG("MIDI input switched to: " + identifier);
+            midiInputDevice->start();
+        }
+    }
+
 private:
+    // Procura dispositivo pelo nome; retorna o primeiro que contém 'name', ou o [0] como fallback
+    static juce::MidiDeviceInfo findDeviceByName (const juce::Array<juce::MidiDeviceInfo>& devices,
+                                                   const juce::String& name)
+    {
+        for (const auto& d : devices)
+            if (d.name.containsIgnoreCase (name))
+                return d;
+        return devices[0];
+    }
+
+    // juce::MidiInputCallback interface
+    void handleIncomingMidiMessage (juce::MidiInput*, const juce::MidiMessage& msg) override
+    {
+        if (msg.isController() && midiCCCallback)
+            midiCCCallback(msg.getChannel(), msg.getControllerNumber(), msg.getControllerValue());
+    }
+
     std::unique_ptr<juce::MidiOutput> midiOutputDevice;
+    std::unique_ptr<juce::MidiInput>  midiInputDevice;
 };
