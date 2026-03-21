@@ -27,7 +27,16 @@ class GirominController
 public:
     enum class InputMode { OSC, MIDI };
 
-    std::function<void(float)> update_UI;
+    // Todos os dados normalizados para [0,1] conforme midi_cc_map.h
+    // Centro/repouso = 0.5 para accel e gyro; botões: 0.0 ou 1.0
+    struct SensorDisplayData
+    {
+        float ax = 0.5f, ay = 0.5f, az = 0.5f;
+        float gx = 0.5f, gy = 0.5f, gz = 0.5f;
+        float b1 = 0.f,  b2 = 0.f;
+    };
+
+    std::function<void(const SensorDisplayData&)> update_UI;
 
     GirominController()
     {
@@ -87,29 +96,33 @@ private:
     // ── Processamento de gestos (compartilhado pelos dois modos de input) ─────
     void ProcessGestures()
     {
-        //===============================================================================================
-        // GIROSCÓPIO — dado bruto normalizado conforme midi_cc_map.h
-        // Encoding:  midi14 = (uint16_t)((int32_t)raw_int16 + 32768) >> 2
-        // Decoding:  float armazenado = raw_int16 * G_NORMALISATION_CONSTANT
-        // Para [0,1]: inverte o encoding → value14 = (raw_int16 + 32768) / 4
-        //             normalizado = value14 / 16383.0  (range 14-bit)
-        //===============================================================================================
         auto* g = getGiromin(0);
+
+        // Normaliza dado armazenado de volta para [0,1] conforme midi_cc_map.h
+        // Encoding: midi14 = (raw_int16 + 32768) >> 2  →  range [0, 16383], centro = 8192
         auto raw_to_01 = [](float stored, float norm_constant) -> float
         {
             float raw_int16 = stored / norm_constant;
             float value14   = (raw_int16 + 32768.f) / 4.f;
-            return value14 / 16383.f;
+            return juce::jlimit (0.f, 1.f, value14 / 16383.f);
         };
 
-        float gx_01 = raw_to_01 (g->getGX(), G_NORMALISATION_CONSTANT);
-        update_UI (gx_01);
-        std::cout << "GX: " << gx_01 << std::endl;
+        SensorDisplayData d;
+        d.ax = raw_to_01 (g->getAX(), A_NORMALISATION_CONSTANT);
+        d.ay = raw_to_01 (g->getAY(), A_NORMALISATION_CONSTANT);
+        d.az = raw_to_01 (g->getAZ(), A_NORMALISATION_CONSTANT);
+        d.gx = raw_to_01 (g->getGX(), G_NORMALISATION_CONSTANT);
+        d.gy = raw_to_01 (g->getGY(), G_NORMALISATION_CONSTANT);
+        d.gz = raw_to_01 (g->getGZ(), G_NORMALISATION_CONSTANT);
+        d.b1 = g->getB1();
+        d.b2 = g->getB2();
+
+        if (update_UI) update_UI (d);
 
         //===============================================================================================
         // BUTTON ACTIONS
         //===============================================================================================
-        float giromin_data_value = getGiromin(0)->getB1();
+        float giromin_data_value = g->getB1();
 
         if (giromin_data_value != previous_giromin_data_value_)
         {
@@ -117,10 +130,7 @@ private:
                                                                IMUGestureToolkit::ButtonAction::TOGGLE);
 
             if (gesture1.changed (static_cast<int>(output_value)))
-            {
-                std::cout << "giromin_data_value: " << output_value << std::endl;
                 midi_handler_.outputMidiMessage (1, 10, (int)output_value);
-            }
 
             previous_giromin_data_value_ = giromin_data_value;
         }
@@ -275,7 +285,7 @@ private:
     // -1 = nenhum MSB pendente para este campo
     std::array<std::array<int, 128>, MAX_GIROMINS> msb_pending_;
 
-    InputMode input_mode_ = InputMode::OSC;
+    InputMode input_mode_ = InputMode::MIDI;
 
     std::vector<GirominData> giromins_;
     OSCHandler osc_handler_;
