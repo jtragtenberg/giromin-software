@@ -67,6 +67,12 @@ private:
 
     void updateCC14bitButton();
 
+    // ── Euler angles display ─────────────────────────────────────────────────
+    juce::ComboBox eulerOrderBox_;
+    juce::ComboBox eulerSourceBox_;    // Raw / Remapped / With Yaw
+    juce::Slider   eulerSliders_[3];   // [0]=first, [1]=last, [2]=mid(constrained)
+    juce::Label    eulerLabels_[3];
+
     QuatVisualizer   quatViz_;
     juce::Slider     yawSlider_;
     juce::Label      yawLabel_    { {}, "Yaw offset" };

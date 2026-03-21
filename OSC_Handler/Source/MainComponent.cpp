@@ -4,10 +4,57 @@ static const char* accelNames[] = { "AX", "AY", "AZ" };
 static const char* gyroNames[]  = { "GX", "GY", "GZ" };
 static const char* btnNames[]   = { "B1", "B2" };
 
+// Returns {a_first, a_last, a_mid_constrained} for the given Tait-Bryan order index.
+// Order indices: 0=XYZ, 1=XZY, 2=YXZ, 3=YZX, 4=ZXY, 5=ZYX
+static std::array<float, 3> eulerFromQuat (float w, float x, float y, float z, int orderIdx)
+{
+    // Rotation matrix elements (row, col)
+    float xx = x*x, yy = y*y, zz = z*z;
+    float r00 = 1.f - 2.f*(yy+zz),  r01 = 2.f*(x*y - w*z),  r02 = 2.f*(x*z + w*y);
+    float r10 = 2.f*(x*y + w*z),     r11 = 1.f - 2.f*(xx+zz), r12 = 2.f*(y*z - w*x);
+    float r20 = 2.f*(x*z - w*y),     r21 = 2.f*(y*z + w*x),   r22 = 1.f - 2.f*(xx+yy);
+
+    float a_first, a_last, a_mid;
+    switch (orderIdx)
+    {
+        case 0: // XYZ
+            a_mid   = std::asin  (juce::jlimit (-1.f, 1.f,  r02));
+            a_first = std::atan2 (-r12, r22);
+            a_last  = std::atan2 (-r01, r00);
+            break;
+        case 1: // XZY
+            a_mid   = std::asin  (juce::jlimit (-1.f, 1.f, -r01));
+            a_first = std::atan2 ( r21, r11);
+            a_last  = std::atan2 ( r02, r00);
+            break;
+        case 2: // YXZ
+            a_mid   = std::asin  (juce::jlimit (-1.f, 1.f, -r12));
+            a_first = std::atan2 ( r02, r22);
+            a_last  = std::atan2 ( r10, r11);
+            break;
+        case 3: // YZX
+            a_mid   = std::asin  (juce::jlimit (-1.f, 1.f,  r10));
+            a_first = std::atan2 (-r20, r00);
+            a_last  = std::atan2 (-r12, r11);
+            break;
+        case 4: // ZXY
+            a_mid   = std::asin  (juce::jlimit (-1.f, 1.f,  r21));
+            a_first = std::atan2 (-r01, r11);
+            a_last  = std::atan2 (-r20, r22);
+            break;
+        default: // ZYX (5)
+            a_mid   = std::asin  (juce::jlimit (-1.f, 1.f, -r20));
+            a_first = std::atan2 ( r10, r00);
+            a_last  = std::atan2 ( r21, r22);
+            break;
+    }
+    return { a_first, a_last, a_mid };
+}
+
 //==============================================================================
 MainComponent::MainComponent()
 {
-    setSize (700, 800);
+    setSize (700, 960);
 
     // ── Persistência de configurações ────────────────────────────────────────
     juce::PropertiesFile::Options opts;
@@ -260,6 +307,37 @@ MainComponent::MainComponent()
 
     addAndMakeVisible (quatViz_);
 
+    // ── Euler angles ─────────────────────────────────────────────────────────
+    eulerOrderBox_.addItem ("XYZ", 1);
+    eulerOrderBox_.addItem ("XZY", 2);
+    eulerOrderBox_.addItem ("YXZ", 3);
+    eulerOrderBox_.addItem ("YZX", 4);
+    eulerOrderBox_.addItem ("ZXY", 5);
+    eulerOrderBox_.addItem ("ZYX", 6);
+    eulerOrderBox_.setSelectedId (1);
+    addAndMakeVisible (eulerOrderBox_);
+
+    eulerSourceBox_.addItem ("Raw",         1);   // d.qw, d.qx, d.qy, d.qz
+    eulerSourceBox_.addItem ("Remapped",    2);   // (qw, qx, qz, -qy)
+    eulerSourceBox_.addItem ("With Yaw",    3);   // remapped + yaw offset
+    eulerSourceBox_.setSelectedId (1);
+    addAndMakeVisible (eulerSourceBox_);
+
+    for (int i = 0; i < 3; ++i)
+    {
+        eulerSliders_[i].setRange (-juce::MathConstants<double>::pi,
+                                    juce::MathConstants<double>::pi);
+        eulerSliders_[i].setSliderStyle (juce::Slider::LinearVertical);
+        eulerSliders_[i].setTextBoxStyle (juce::Slider::NoTextBox, true, 0, 0);
+        eulerSliders_[i].setInterceptsMouseClicks (false, false);
+        addAndMakeVisible (eulerSliders_[i]);
+        eulerLabels_[i].setJustificationType (juce::Justification::centred);
+        addAndMakeVisible (eulerLabels_[i]);
+    }
+    // Middle angle (index 2) constrained to [-pi/2, pi/2]
+    eulerSliders_[2].setRange (-juce::MathConstants<double>::pi / 2.0,
+                                juce::MathConstants<double>::pi / 2.0);
+
     // ── Yaw offset slider ────────────────────────────────────────────────────
     yawSlider_.setRange (-180.0, 180.0, 1.0);
     yawSlider_.setValue (0.0, juce::dontSendNotification);
@@ -502,6 +580,47 @@ void MainComponent::timerCallback()
         juce::String::formatted ("Quat:%+5.1f %+5.1f %+5.1f %+5.1f",
                                  d.qw, d.qx, d.qy, d.qz),
         juce::dontSendNotification);
+
+    // Select quaternion source for Euler decomposition
+    int oi = eulerOrderBox_.getSelectedId() - 1;
+    float ew, ex, ey, ez;
+    switch (eulerSourceBox_.getSelectedId())
+    {
+        case 2: // Remapped: sensor (X=right,Y=up,Z=fwd) → viz (X=right,Y=fwd,Z=up)
+            ew =  d.qw; ex =  d.qx; ey =  d.qz; ez = -d.qy;
+            break;
+        case 3: // Remapped + yaw offset (rotation around viz Y = world Z/up)
+        {
+            float rw =  d.qw, rx =  d.qx, ry =  d.qz, rz = -d.qy;
+            float yawRad = (float)(yawSlider_.getValue() * juce::MathConstants<double>::pi / 180.0);
+            float cY = std::cos (yawRad * 0.5f), sY = std::sin (yawRad * 0.5f);
+            ew = cY*rw - sY*ry;
+            ex = cY*rx + sY*rz;
+            ey = cY*ry + sY*rw;
+            ez = cY*rz - sY*rx;
+            break;
+        }
+        default: // Raw
+            ew = d.qw; ex = d.qx; ey = d.qy; ez = d.qz;
+            break;
+    }
+    auto euler = eulerFromQuat (ew, ex, ey, ez, oi);
+    eulerSliders_[0].setValue (euler[0], juce::dontSendNotification);
+    eulerSliders_[1].setValue (euler[1], juce::dontSendNotification);
+    eulerSliders_[2].setValue (euler[2], juce::dontSendNotification);
+
+    // Axis labels per order: {first, last, mid}
+    // Axis labels per order: columns are {first, last, mid}
+    static const char* orderLabels[6][3] = {
+        { "X", "Z", "Y" },   // XYZ
+        { "X", "Y", "Z" },   // XZY
+        { "Y", "Z", "X" },   // YXZ
+        { "Y", "X", "Z" },   // YZX
+        { "Z", "Y", "X" },   // ZXY
+        { "Z", "X", "Y" },   // ZYX
+    };
+    for (int i = 0; i < 3; ++i)
+        eulerLabels_[i].setText (orderLabels[oi][i], juce::dontSendNotification);
 }
 
 //==============================================================================
@@ -530,8 +649,8 @@ void MainComponent::resized()
     const int rowH   = 34;
     const int gap    = 4;
 
-    // Height for 6 sliders + buttons
-    const int inputAreaH = 3 * (rowH + gap) + 10 + 3 * (rowH + gap) + 10 + 36;  // ~300
+    // Height for 6 sliders + buttons + euler section (10 + 26 combo + 6 + 120 sliders)
+    const int inputAreaH = 3 * (rowH + gap) + 10 + 3 * (rowH + gap) + 10 + 36 + 10 + 26 + 6 + 120;
 
     auto inputArea = area.removeFromTop (inputAreaH);
 
@@ -587,6 +706,30 @@ void MainComponent::resized()
         btnToggles[0].setBounds (row.removeFromLeft (80));
         row.removeFromLeft (10);
         btnToggles[1].setBounds (row.removeFromLeft (80));
+    }
+
+    // ── Euler angles ─────────────────────────────────────────────────────────
+    inputArea.removeFromTop (10);
+    {
+        auto row = inputArea.removeFromTop (26);
+        int half = row.getWidth() / 2;
+        eulerOrderBox_ .setBounds (row.removeFromLeft (half - 2));
+        row.removeFromLeft (4);
+        eulerSourceBox_.setBounds (row);
+    }
+    inputArea.removeFromTop (6);
+
+    {
+        auto eulerArea = inputArea.removeFromTop (120);
+        int sliderW = eulerArea.getWidth() / 3;
+        for (int i = 0; i < 3; ++i)
+        {
+            auto col = (i < 2) ? eulerArea.removeFromLeft (sliderW)
+                                : eulerArea;
+            auto labelRow = col.removeFromBottom (18);
+            eulerSliders_[i].setBounds (col);
+            eulerLabels_[i].setBounds (labelRow);
+        }
     }
 
     area.removeFromTop (14);
