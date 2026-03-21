@@ -61,6 +61,9 @@ private:
     juce::ComboBox   ccNumberBox;
     juce::Label      ccRateLabel    { {}, "Rate (Hz)" };
     juce::Slider     ccRateSlider;
+    juce::TextButton cc14bitBtn     { "14-bit" };
+
+    void updateCC14bitButton();
 
     GirominController giromin_controller_;
 

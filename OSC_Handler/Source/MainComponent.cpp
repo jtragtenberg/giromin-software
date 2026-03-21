@@ -232,6 +232,17 @@ MainComponent::MainComponent()
     };
     addAndMakeVisible (ccRateSlider);
 
+    // 14-bit / 7-bit toggle
+    cc14bitBtn.setClickingTogglesState (true);
+    cc14bitBtn.setToggleState (giromin_controller_.getCCOut14bit(), juce::dontSendNotification);
+    cc14bitBtn.onClick = [this]()
+    {
+        giromin_controller_.setCCOut14bit (cc14bitBtn.getToggleState());
+        updateCC14bitButton();
+    };
+    addAndMakeVisible (cc14bitBtn);
+    updateCC14bitButton();
+
     // ── Callback de dados do sensor ──────────────────────────────────────────
     giromin_controller_.update_UI = [this](const GirominController::SensorDisplayData& d)
     {
@@ -279,6 +290,14 @@ void MainComponent::populateNoteBox (juce::ComboBox& box, int defaultNote)
         box.addItem (juce::MidiMessage::getMidiNoteName (n, true, true, 4), n + 1);
     }
     box.setSelectedId (defaultNote + 1);
+}
+
+void MainComponent::updateCC14bitButton()
+{
+    bool is14 = cc14bitBtn.getToggleState();
+    cc14bitBtn.setButtonText (is14 ? "14-bit" : "7-bit");
+    cc14bitBtn.setColour (juce::TextButton::buttonColourId,
+                          is14 ? juce::Colours::steelblue : juce::Colours::slategrey);
 }
 
 void MainComponent::updateCCEnableButton()
@@ -421,12 +440,14 @@ void MainComponent::resized()
             ccNumberBox.setBounds (row.removeFromLeft (colW));
         }
 
-        // Rate
+        // Rate + 14/7-bit toggle
         {
             auto row = area.removeFromTop (26);
             ccRateLabel.setBounds (row.removeFromLeft (colLabelW));
             row.removeFromLeft (4);
-            ccRateSlider.setBounds (row.removeFromLeft (colW + 60));
+            ccRateSlider.setBounds (row.removeFromLeft (colW));
+            row.removeFromLeft (8);
+            cc14bitBtn.setBounds (row.removeFromLeft (60));
         }
     }
 }

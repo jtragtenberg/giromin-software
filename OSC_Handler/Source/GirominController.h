@@ -109,10 +109,12 @@ public:
     void setCCOutSource  (CCSource src)   { cc_out_source_  = src; }
     void setCCOutMSB     (int msb_cc)     { cc_out_msb_     = juce::jlimit (0, 31, msb_cc); }
     void setCCOutRateHz  (int hz)         { cc_out_rate_hz_ = juce::jlimit (1, 200, hz); }
+    void setCCOut14bit   (bool use14bit)  { cc_out_14bit_   = use14bit; cc_out_last_value14_ = -1; }
     bool     getCCOutEnabled() const      { return cc_out_enabled_; }
     CCSource getCCOutSource()  const      { return cc_out_source_; }
     int      getCCOutMSB()     const      { return cc_out_msb_; }
     int      getCCOutRateHz()  const      { return cc_out_rate_hz_; }
+    bool     getCCOut14bit()   const      { return cc_out_14bit_; }
     
     GirominData* getGiromin (int index)
     {
@@ -202,7 +204,11 @@ private:
             if ((now_ms - cc_out_last_send_ms_) >= interval_ms
                 && value14 != cc_out_last_value14_)
             {
-                midi_handler_.sendCC14 (note_channel_, cc_out_msb_, src_val);
+                if (cc_out_14bit_)
+                    midi_handler_.sendCC14 (note_channel_, cc_out_msb_, src_val);
+                else
+                    midi_handler_.outputMidiMessage (note_channel_, cc_out_msb_,
+                                                     juce::jlimit (0, 127, (int)(src_val * 127.f)));
                 cc_out_last_send_ms_  = now_ms;
                 cc_out_last_value14_  = value14;
             }
@@ -360,8 +366,9 @@ private:
     float prev_b1_raw_     = 0.f;
     float prev_b2_raw_     = 0.f;
 
-    // CC output 14-bit
+    // CC output
     bool     cc_out_enabled_      = false;
+    bool     cc_out_14bit_        = true;   // true = 14-bit (MSB+LSB), false = 7-bit
     CCSource cc_out_source_       = CCSource::GX;
     int      cc_out_msb_          = 1;      // Modulation Wheel por padrão
     int      cc_out_rate_hz_      = 10;
