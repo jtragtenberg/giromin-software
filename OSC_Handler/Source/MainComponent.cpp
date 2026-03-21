@@ -176,44 +176,33 @@ MainComponent::MainComponent()
         addAndMakeVisible (ccSourceBox);
     }
 
-    // CC number selector — standard 14-bit CCs (MSB numbers only)
+    // CC number selector — all 14-bit CCs 0-31 (item ID = msb + 1)
     {
-        struct { const char* name; int msb; } cc14s[] = {
-            { "0 - Bank Select",       0  },
-            { "1 - Mod Wheel",         1  },
-            { "2 - Breath",            2  },
-            { "4 - Foot",              4  },
-            { "5 - Portamento Time",   5  },
-            { "6 - Data Entry",        6  },
-            { "7 - Channel Volume",    7  },
-            { "8 - Balance",           8  },
-            { "10 - Pan",              10 },
-            { "11 - Expression",       11 },
-            { "12 - Effect Ctrl 1",    12 },
-            { "13 - Effect Ctrl 2",    13 },
-            { "16 - Gen Purpose 1",    16 },
-            { "17 - Gen Purpose 2",    17 },
-            { "18 - Gen Purpose 3",    18 },
-            { "19 - Gen Purpose 4",    19 },
+        static const char* ccNames[32] = {
+            "0  - Bank Select",         "1  - Mod Wheel",
+            "2  - Breath Controller",   "3  - Undefined",
+            "4  - Foot Pedal",          "5  - Portamento Time",
+            "6  - Data Entry",          "7  - Volume",
+            "8  - Balance",             "9  - Undefined",
+            "10 - Pan",                 "11 - Expression",
+            "12 - Effect Controller 1", "13 - Effect Controller 2",
+            "14 - Undefined",           "15 - Undefined",
+            "16 - General Purpose 1",   "17 - General Purpose 2",
+            "18 - General Purpose 3",   "19 - General Purpose 4",
+            "20 - Undefined",           "21 - Undefined",
+            "22 - Undefined",           "23 - Undefined",
+            "24 - Undefined",           "25 - Undefined",
+            "26 - Undefined",           "27 - Undefined",
+            "28 - Undefined",           "29 - Undefined",
+            "30 - Undefined",           "31 - Undefined",
         };
-        int defaultId = 1;
-        int id = 1;
-        for (auto& c : cc14s)
-        {
-            ccNumberBox.addItem (c.name, id);
-            if (c.msb == giromin_controller_.getCCOutMSB())
-                defaultId = id;
-            ++id;
-        }
-        ccNumberBox.setSelectedId (defaultId);
+        for (int msb = 0; msb < 32; ++msb)
+            ccNumberBox.addItem (ccNames[msb], msb + 1);  // ID = msb + 1
 
-        // Store MSB values for lookup in onChange
+        ccNumberBox.setSelectedId (giromin_controller_.getCCOutMSB() + 1);
         ccNumberBox.onChange = [this]()
         {
-            int msbs[] = { 0,1,2,4,5,6,7,8,10,11,12,13,16,17,18,19 };
-            int sel = ccNumberBox.getSelectedId() - 1;
-            if (sel >= 0 && sel < 16)
-                giromin_controller_.setCCOutMSB (msbs[sel]);
+            giromin_controller_.setCCOutMSB (ccNumberBox.getSelectedId() - 1);
         };
         addAndMakeVisible (ccNumberBox);
     }
