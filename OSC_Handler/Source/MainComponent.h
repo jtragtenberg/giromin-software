@@ -54,18 +54,17 @@ private:
     juce::ComboBox noteB1Box;
     juce::ComboBox noteB2Box;
 
-    // ── Painel CC Output ─────────────────────────────────────────────────────
-    juce::Label      ccOutLabel     { {}, "CC Output" };
-    juce::TextButton ccOutEnableBtn { "Enable" };
-    juce::Label      ccSourceLabel  { {}, "Source" };
-    juce::ComboBox   ccSourceBox;
-    juce::Label      ccNumberLabel  { {}, "CC" };
-    juce::ComboBox   ccNumberBox;
-    juce::Label      ccRateLabel    { {}, "Rate (Hz)" };
-    juce::Slider     ccRateSlider;
-    juce::TextButton cc14bitBtn     { "14-bit" };
+    // ── 3 painéis CC Output ──────────────────────────────────────────────────
+    juce::Label      ccOutLabels_[3];
+    juce::TextButton ccOutEnableBtns_[3];
+    juce::ComboBox   ccSourceBoxes_[3];
+    juce::ComboBox   ccNumberBoxes_[3];
+    juce::Slider     ccRateSliders_[3];
+    juce::TextButton cc14bitBtns_[3];
 
-    void updateCC14bitButton();
+    void setupCCPanel (int i);
+    void updateCC14bitButton (int i);
+    void updateCCEnableButton (int i);
 
     // ── Euler angles display ─────────────────────────────────────────────────
     juce::ComboBox eulerOrderBox_;
@@ -91,7 +90,6 @@ private:
     void setupSlider (juce::Slider& s, juce::Label& l, const juce::String& name);
     void populateNoteBox (juce::ComboBox& box, int defaultNote);
     void updateModeButtons();
-    void updateCCEnableButton();
     void saveSettings();
     void loadSettings();
 
