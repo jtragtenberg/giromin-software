@@ -67,10 +67,14 @@ private:
 
     GirominController giromin_controller_;
 
+    juce::ApplicationProperties appProperties_;
+
     void setupSlider (juce::Slider& s, juce::Label& l, const juce::String& name);
     void populateNoteBox (juce::ComboBox& box, int defaultNote);
     void updateModeButtons();
     void updateCCEnableButton();
+    void saveSettings();
+    void loadSettings();
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
 };

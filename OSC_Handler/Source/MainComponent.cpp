@@ -9,6 +9,13 @@ MainComponent::MainComponent()
 {
     setSize (700, 720);
 
+    // ── Persistência de configurações ────────────────────────────────────────
+    juce::PropertiesFile::Options opts;
+    opts.applicationName     = "GirominToolkit";
+    opts.filenameSuffix      = "settings";
+    opts.osxLibrarySubFolder = "Application Support";
+    appProperties_.setStorageParameters (opts);
+
     // ── Botões de modo ───────────────────────────────────────────────────────
     oscModeBtn .setClickingTogglesState (false);
     midiModeBtn.setClickingTogglesState (false);
@@ -17,12 +24,14 @@ MainComponent::MainComponent()
     {
         giromin_controller_.setInputMode (GirominController::InputMode::OSC);
         updateModeButtons();
+        saveSettings();
     };
 
     midiModeBtn.onClick = [this]()
     {
         giromin_controller_.setInputMode (GirominController::InputMode::MIDI);
         updateModeButtons();
+        saveSettings();
     };
 
     addAndMakeVisible (oscModeBtn);
@@ -47,6 +56,7 @@ MainComponent::MainComponent()
         int selected = midiInputSelector.getSelectedId() - 2;
         if (selected >= 0 && selected < devices.size())
             giromin_controller_.openMidiInputDevice (devices[selected].identifier);
+        saveSettings();
     };
 
     addAndMakeVisible (midiInputSelector);
@@ -97,6 +107,7 @@ MainComponent::MainComponent()
             int sel = midiOutputSelector.getSelectedId() - 2;
             if (sel >= 0 && sel < devices.size())
                 giromin_controller_.openMidiOutputDevice (devices[sel].identifier);
+            saveSettings();
         };
         addAndMakeVisible (midiOutputSelector);
     }
@@ -108,6 +119,7 @@ MainComponent::MainComponent()
     noteChannelBox.onChange = [this]()
     {
         giromin_controller_.setNoteChannel (noteChannelBox.getSelectedId());
+        saveSettings();
     };
     addAndMakeVisible (noteChannelBox);
 
@@ -116,6 +128,7 @@ MainComponent::MainComponent()
     noteB1Box.onChange = [this]()
     {
         giromin_controller_.setNoteForButton (0, noteB1Box.getSelectedId() - 1);
+        saveSettings();
     };
     addAndMakeVisible (noteB1Box);
 
@@ -123,6 +136,7 @@ MainComponent::MainComponent()
     noteB2Box.onChange = [this]()
     {
         giromin_controller_.setNoteForButton (1, noteB2Box.getSelectedId() - 1);
+        saveSettings();
     };
     addAndMakeVisible (noteB2Box);
 
@@ -142,6 +156,7 @@ MainComponent::MainComponent()
     {
         giromin_controller_.setCCOutEnabled (ccOutEnableBtn.getToggleState());
         updateCCEnableButton();
+        saveSettings();
     };
     addAndMakeVisible (ccOutEnableBtn);
     updateCCEnableButton();
@@ -172,6 +187,7 @@ MainComponent::MainComponent()
             int sel = ccSourceBox.getSelectedId() - 1;
             if (sel >= 0 && sel < 6)
                 giromin_controller_.setCCOutSource (srcs[sel]);
+            saveSettings();
         };
         addAndMakeVisible (ccSourceBox);
     }
@@ -203,6 +219,7 @@ MainComponent::MainComponent()
         ccNumberBox.onChange = [this]()
         {
             giromin_controller_.setCCOutMSB (ccNumberBox.getSelectedId() - 1);
+            saveSettings();
         };
         addAndMakeVisible (ccNumberBox);
     }
@@ -218,6 +235,7 @@ MainComponent::MainComponent()
     ccRateSlider.onValueChange = [this]()
     {
         giromin_controller_.setCCOutRateHz ((int)ccRateSlider.getValue());
+        saveSettings();
     };
     addAndMakeVisible (ccRateSlider);
 
@@ -228,6 +246,7 @@ MainComponent::MainComponent()
     {
         giromin_controller_.setCCOut14bit (cc14bitBtn.getToggleState());
         updateCC14bitButton();
+        saveSettings();
     };
     addAndMakeVisible (cc14bitBtn);
     updateCC14bitButton();
@@ -254,6 +273,7 @@ MainComponent::MainComponent()
     };
 
     updateModeButtons();
+    loadSettings();
 }
 
 MainComponent::~MainComponent() {}
@@ -295,6 +315,125 @@ void MainComponent::updateCCEnableButton()
     ccOutEnableBtn.setButtonText (on ? "Enabled" : "Enable");
     ccOutEnableBtn.setColour (juce::TextButton::buttonColourId,
                               on ? juce::Colours::limegreen : juce::Colours::darkgrey);
+}
+
+void MainComponent::saveSettings()
+{
+    auto* p = appProperties_.getUserSettings();
+    if (p == nullptr) return;
+
+    p->setValue ("inputMode",    (int)giromin_controller_.getInputMode());
+
+    auto inDevs = giromin_controller_.getMidiInputDevices();
+    int inSel = midiInputSelector.getSelectedId() - 2;
+    if (inSel >= 0 && inSel < inDevs.size())
+        p->setValue ("midiInputDevice", inDevs[inSel].name);
+
+    auto outDevs = giromin_controller_.getMidiOutputDevices();
+    int outSel = midiOutputSelector.getSelectedId() - 2;
+    if (outSel >= 0 && outSel < outDevs.size())
+        p->setValue ("midiOutputDevice", outDevs[outSel].name);
+
+    p->setValue ("noteChannel",  giromin_controller_.getNoteChannel());
+    p->setValue ("noteB1",       giromin_controller_.getNoteForButton (0));
+    p->setValue ("noteB2",       giromin_controller_.getNoteForButton (1));
+
+    p->setValue ("ccOutEnabled", giromin_controller_.getCCOutEnabled());
+    p->setValue ("ccOut14bit",   giromin_controller_.getCCOut14bit());
+    p->setValue ("ccOutSource",  (int)giromin_controller_.getCCOutSource());
+    p->setValue ("ccOutMSB",     giromin_controller_.getCCOutMSB());
+    p->setValue ("ccOutRateHz",  giromin_controller_.getCCOutRateHz());
+
+    p->saveIfNeeded();
+}
+
+void MainComponent::loadSettings()
+{
+    auto* p = appProperties_.getUserSettings();
+    if (p == nullptr) return;
+
+    // Input mode
+    auto mode = (GirominController::InputMode) p->getIntValue ("inputMode", 1);
+    giromin_controller_.setInputMode (mode);
+    updateModeButtons();
+
+    // MIDI input device
+    {
+        juce::String saved = p->getValue ("midiInputDevice", "Teensy MIDI Port 1");
+        auto devs = giromin_controller_.getMidiInputDevices();
+        for (int i = 0; i < devs.size(); ++i)
+        {
+            if (devs[i].name == saved)
+            {
+                midiInputSelector.setSelectedId (i + 2, juce::dontSendNotification);
+                giromin_controller_.openMidiInputDevice (devs[i].identifier);
+                break;
+            }
+        }
+    }
+
+    // MIDI output device
+    {
+        juce::String saved = p->getValue ("midiOutputDevice", "IAC Driver Bus 1");
+        auto devs = giromin_controller_.getMidiOutputDevices();
+        for (int i = 0; i < devs.size(); ++i)
+        {
+            if (devs[i].name == saved)
+            {
+                midiOutputSelector.setSelectedId (i + 2, juce::dontSendNotification);
+                giromin_controller_.openMidiOutputDevice (devs[i].identifier);
+                break;
+            }
+        }
+    }
+
+    // Note channel
+    int ch = p->getIntValue ("noteChannel", 2);
+    giromin_controller_.setNoteChannel (ch);
+    noteChannelBox.setSelectedId (ch, juce::dontSendNotification);
+
+    // Notes per button
+    int n1 = p->getIntValue ("noteB1", 60);
+    int n2 = p->getIntValue ("noteB2", 62);
+    giromin_controller_.setNoteForButton (0, n1);
+    giromin_controller_.setNoteForButton (1, n2);
+    noteB1Box.setSelectedId (n1 + 1, juce::dontSendNotification);
+    noteB2Box.setSelectedId (n2 + 1, juce::dontSendNotification);
+
+    // CC out enabled
+    bool ccEnabled = p->getBoolValue ("ccOutEnabled", false);
+    giromin_controller_.setCCOutEnabled (ccEnabled);
+    ccOutEnableBtn.setToggleState (ccEnabled, juce::dontSendNotification);
+    updateCCEnableButton();
+
+    // CC 14-bit
+    bool cc14 = p->getBoolValue ("ccOut14bit", true);
+    giromin_controller_.setCCOut14bit (cc14);
+    cc14bitBtn.setToggleState (cc14, juce::dontSendNotification);
+    updateCC14bitButton();
+
+    // CC source (0=AX..5=GZ)
+    int srcIdx = p->getIntValue ("ccOutSource", 3);
+    GirominController::CCSource srcs[] = {
+        GirominController::CCSource::AX, GirominController::CCSource::AY,
+        GirominController::CCSource::AZ, GirominController::CCSource::GX,
+        GirominController::CCSource::GY, GirominController::CCSource::GZ
+    };
+    if (srcIdx >= 0 && srcIdx < 6)
+    {
+        giromin_controller_.setCCOutSource (srcs[srcIdx]);
+        ccSourceBox.setSelectedId (srcIdx + 1, juce::dontSendNotification);
+    }
+
+    // CC MSB (item ID = msb + 1)
+    int msb = p->getIntValue ("ccOutMSB", 1);
+    giromin_controller_.setCCOutMSB (msb);
+    ccNumberBox.setSelectedId (msb + 1, juce::dontSendNotification);
+
+    // CC rate
+    int rateHz = p->getIntValue ("ccOutRateHz", 10);
+    giromin_controller_.setCCOutRateHz (rateHz);
+    ccRateSlider.setValue (rateHz, juce::dontSendNotification);
 }
 
 void MainComponent::updateModeButtons()
