@@ -41,9 +41,21 @@ private:
     // Botões (B1, B2)
     juce::TextButton btnToggles[2];
 
+    // ── Painel Note Output ───────────────────────────────────────────────────
+    juce::Label    noteOutputLabel  { {}, "Note Output" };
+    juce::Label    midiOutLabel     { {}, "Device" };
+    juce::Label    noteChLabel      { {}, "Ch" };
+    juce::Label    noteB1Label      { {}, "B1" };
+    juce::Label    noteB2Label      { {}, "B2" };
+    juce::ComboBox midiOutputSelector;
+    juce::ComboBox noteChannelBox;
+    juce::ComboBox noteB1Box;
+    juce::ComboBox noteB2Box;
+
     GirominController giromin_controller_;
 
     void setupSlider (juce::Slider& s, juce::Label& l, const juce::String& name);
+    void populateNoteBox (juce::ComboBox& box, int defaultNote);
     void updateModeButtons();
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)

@@ -70,7 +70,7 @@ public:
             midiInputDevice->stop();
     }
 
-    // ── Output ───────────────────────────────────────────────────────────────
+    // ── Output: CC ───────────────────────────────────────────────────────────
     void outputMidiMessage (const int midi_ch, const int midi_cc, const int midi_cc_value)
     {
         if (midiOutputDevice != nullptr)
@@ -80,13 +80,38 @@ public:
         }
     }
 
-    // ── Lista de dispositivos input disponíveis ───────────────────────────────
+    // ── Output: Note On / Note Off ────────────────────────────────────────────
+    void sendNoteOn (int channel, int note, int velocity = 127)
+    {
+        if (midiOutputDevice != nullptr)
+            midiOutputDevice->sendMessageNow (juce::MidiMessage::noteOn  (channel, note, (juce::uint8)velocity));
+    }
+
+    void sendNoteOff (int channel, int note)
+    {
+        if (midiOutputDevice != nullptr)
+            midiOutputDevice->sendMessageNow (juce::MidiMessage::noteOff (channel, note));
+    }
+
+    // ── Dispositivos output ───────────────────────────────────────────────────
+    juce::Array<juce::MidiDeviceInfo> getAvailableOutputDevices() const
+    {
+        return juce::MidiOutput::getAvailableDevices();
+    }
+
+    void openOutputDevice (const juce::String& identifier)
+    {
+        midiOutputDevice = juce::MidiOutput::openDevice(identifier);
+        if (midiOutputDevice != nullptr)
+            DBG("MIDI output switched to: " + identifier);
+    }
+
+    // ── Dispositivos input ────────────────────────────────────────────────────
     juce::Array<juce::MidiDeviceInfo> getAvailableInputDevices() const
     {
         return juce::MidiInput::getAvailableDevices();
     }
 
-    // Abre um dispositivo input pelo identifier
     void openInputDevice (const juce::String& identifier)
     {
         if (midiInputDevice != nullptr)

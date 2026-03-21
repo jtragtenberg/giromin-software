@@ -7,7 +7,7 @@ static const char* btnNames[]   = { "B1", "B2" };
 //==============================================================================
 MainComponent::MainComponent()
 {
-    setSize (700, 480);
+    setSize (700, 600);
 
     // ── Botões de modo ───────────────────────────────────────────────────────
     oscModeBtn .setClickingTogglesState (false);
@@ -29,7 +29,7 @@ MainComponent::MainComponent()
     addAndMakeVisible (midiModeBtn);
 
     // ── Seletor de dispositivo MIDI input ────────────────────────────────────
-    midiInputSelector.addItem ("(nenhum)", 1);
+    midiInputSelector.addItem ("(none)", 1);
     int itemId = 2;
     int teensyItemId = -1;
     for (const auto& dev : giromin_controller_.getMidiInputDevices())
@@ -67,6 +67,64 @@ MainComponent::MainComponent()
         btnToggles[i].setEnabled (false);
         addAndMakeVisible (btnToggles[i]);
     }
+
+    // ── Painel Note Output ───────────────────────────────────────────────────
+    noteOutputLabel.setFont (juce::Font (14.f, juce::Font::bold));
+    addAndMakeVisible (noteOutputLabel);
+
+    for (auto* l : { &midiOutLabel, &noteChLabel, &noteB1Label, &noteB2Label })
+    {
+        l->setJustificationType (juce::Justification::centredRight);
+        addAndMakeVisible (l);
+    }
+
+    // Output device selector
+    {
+        midiOutputSelector.addItem ("(none)", 1);
+        int id = 2;
+        int iacId = -1;
+        for (const auto& dev : giromin_controller_.getMidiOutputDevices())
+        {
+            midiOutputSelector.addItem (dev.name, id);
+            if (dev.name.containsIgnoreCase ("IAC Driver Bus 1"))
+                iacId = id;
+            ++id;
+        }
+        midiOutputSelector.setSelectedId (iacId > 0 ? iacId : 1);
+        midiOutputSelector.onChange = [this]()
+        {
+            auto devices = giromin_controller_.getMidiOutputDevices();
+            int sel = midiOutputSelector.getSelectedId() - 2;
+            if (sel >= 0 && sel < devices.size())
+                giromin_controller_.openMidiOutputDevice (devices[sel].identifier);
+        };
+        addAndMakeVisible (midiOutputSelector);
+    }
+
+    // Channel selector 1–16
+    for (int ch = 1; ch <= 16; ++ch)
+        noteChannelBox.addItem ("Ch " + juce::String(ch), ch);
+    noteChannelBox.setSelectedId (giromin_controller_.getNoteChannel());
+    noteChannelBox.onChange = [this]()
+    {
+        giromin_controller_.setNoteChannel (noteChannelBox.getSelectedId());
+    };
+    addAndMakeVisible (noteChannelBox);
+
+    // Note selectors B1 / B2
+    populateNoteBox (noteB1Box, giromin_controller_.getNoteForButton (0));
+    noteB1Box.onChange = [this]()
+    {
+        giromin_controller_.setNoteForButton (0, noteB1Box.getSelectedId() - 1);
+    };
+    addAndMakeVisible (noteB1Box);
+
+    populateNoteBox (noteB2Box, giromin_controller_.getNoteForButton (1));
+    noteB2Box.onChange = [this]()
+    {
+        giromin_controller_.setNoteForButton (1, noteB2Box.getSelectedId() - 1);
+    };
+    addAndMakeVisible (noteB2Box);
 
     // ── Callback de dados do sensor ──────────────────────────────────────────
     giromin_controller_.update_UI = [this](const GirominController::SensorDisplayData& d)
@@ -107,6 +165,16 @@ void MainComponent::setupSlider (juce::Slider& s, juce::Label& l, const juce::St
     addAndMakeVisible (l);
 }
 
+void MainComponent::populateNoteBox (juce::ComboBox& box, int defaultNote)
+{
+    for (int n = 0; n < 128; ++n)
+    {
+        // ID = note + 1 (IDs devem ser >= 1)
+        box.addItem (juce::MidiMessage::getMidiNoteName (n, true, true, 4), n + 1);
+    }
+    box.setSelectedId (defaultNote + 1);
+}
+
 void MainComponent::updateModeButtons()
 {
     bool isMidi = giromin_controller_.getInputMode() == GirominController::InputMode::MIDI;
@@ -121,14 +189,6 @@ void MainComponent::updateModeButtons()
 void MainComponent::paint (juce::Graphics& g)
 {
     g.fillAll (getLookAndFeel().findColour (juce::ResizableWindow::backgroundColourId));
-
-    // Separador entre accel e gyro
-    auto area = getLocalBounds().reduced (10);
-    area.removeFromTop (40);  // topBar
-    int rowH = 36;
-    int sepY  = area.getY() + 3 * rowH + 8;
-    g.setColour (juce::Colours::grey.withAlpha (0.4f));
-    g.drawHorizontalLine (sepY, (float)area.getX(), (float)area.getRight());
 }
 
 void MainComponent::resized()
@@ -146,7 +206,7 @@ void MainComponent::resized()
     area.removeFromTop (10);
 
     const int labelW = 30;
-    const int rowH   = 36;
+    const int rowH   = 34;
     const int gap    = 4;
 
     // ── Acelerômetro ─────────────────────────────────────────────────────────
@@ -158,7 +218,7 @@ void MainComponent::resized()
         accelSliders[i].setBounds (row);
     }
 
-    area.removeFromTop (12);  // espaço entre grupos
+    area.removeFromTop (10);
 
     // ── Giroscópio ───────────────────────────────────────────────────────────
     for (int i = 0; i < 3; ++i)
@@ -169,11 +229,53 @@ void MainComponent::resized()
         gyroSliders[i].setBounds (row);
     }
 
-    area.removeFromTop (12);
+    area.removeFromTop (10);
 
     // ── Botões ───────────────────────────────────────────────────────────────
-    auto btnRow = area.removeFromTop (40);
-    btnToggles[0].setBounds (btnRow.removeFromLeft (80));
-    btnRow.removeFromLeft (10);
-    btnToggles[1].setBounds (btnRow.removeFromLeft (80));
+    {
+        auto row = area.removeFromTop (36);
+        btnToggles[0].setBounds (row.removeFromLeft (80));
+        row.removeFromLeft (10);
+        btnToggles[1].setBounds (row.removeFromLeft (80));
+    }
+
+    area.removeFromTop (14);
+
+    // ── Painel Note Output ───────────────────────────────────────────────────
+    noteOutputLabel.setBounds (area.removeFromTop (20));
+    area.removeFromTop (6);
+
+    const int colLabelW = 46;
+    const int colW      = 180;
+    const int smallW    = 70;
+
+    // Linha 1: Device
+    {
+        auto row = area.removeFromTop (26);
+        area.removeFromTop (gap);
+        midiOutLabel.setBounds (row.removeFromLeft (colLabelW));
+        row.removeFromLeft (4);
+        midiOutputSelector.setBounds (row.removeFromLeft (colW));
+    }
+
+    // Linha 2: Channel
+    {
+        auto row = area.removeFromTop (26);
+        area.removeFromTop (gap);
+        noteChLabel.setBounds (row.removeFromLeft (colLabelW));
+        row.removeFromLeft (4);
+        noteChannelBox.setBounds (row.removeFromLeft (smallW));
+    }
+
+    // Linha 3: B1 note / B2 note
+    {
+        auto row = area.removeFromTop (26);
+        noteB1Label.setBounds (row.removeFromLeft (colLabelW));
+        row.removeFromLeft (4);
+        noteB1Box.setBounds (row.removeFromLeft (smallW));
+        row.removeFromLeft (16);
+        noteB2Label.setBounds (row.removeFromLeft (colLabelW));
+        row.removeFromLeft (4);
+        noteB2Box.setBounds (row.removeFromLeft (smallW));
+    }
 }

@@ -85,6 +85,23 @@ public:
     {
         midi_handler_.openInputDevice (identifier);
     }
+
+    // ── Controle de output MIDI ───────────────────────────────────────────────
+    juce::Array<juce::MidiDeviceInfo> getMidiOutputDevices() const
+    {
+        return midi_handler_.getAvailableOutputDevices();
+    }
+
+    void openMidiOutputDevice (const juce::String& identifier)
+    {
+        midi_handler_.openOutputDevice (identifier);
+    }
+
+    // ── Configuração de notas por botão ───────────────────────────────────────
+    void setNoteChannel (int ch)            { note_channel_ = juce::jlimit (1, 16, ch); }
+    void setNoteForButton (int btn, int note) { note_for_btn_[btn] = juce::jlimit (0, 127, note); }
+    int  getNoteChannel()                   const { return note_channel_; }
+    int  getNoteForButton (int btn)         const { return note_for_btn_[btn]; }
     
     GirominData* getGiromin (int index)
     {
@@ -120,7 +137,7 @@ private:
         if (update_UI) update_UI (d);
 
         //===============================================================================================
-        // BUTTON ACTIONS
+        // BUTTON ACTIONS — CC toggle (lógica original)
         //===============================================================================================
         float giromin_data_value = g->getB1();
 
@@ -134,6 +151,22 @@ private:
 
             previous_giromin_data_value_ = giromin_data_value;
         }
+
+        //===============================================================================================
+        // BUTTON ACTIONS — Note On / Note Off
+        //===============================================================================================
+        auto processButtonNote = [&](float current, float& prev, int btnIdx)
+        {
+            if (current == prev) return;
+            if (current > 0.5f)
+                midi_handler_.sendNoteOn  (note_channel_, note_for_btn_[btnIdx]);
+            else
+                midi_handler_.sendNoteOff (note_channel_, note_for_btn_[btnIdx]);
+            prev = current;
+        };
+
+        processButtonNote (d.b1, prev_b1_raw_, 0);
+        processButtonNote (d.b2, prev_b2_raw_, 1);
     }
 
     // ── Decodificação de MIDI CC 14-bit → float normalizado ──────────────────
@@ -280,6 +313,12 @@ private:
     IMUGestureToolkit gesture1, gesture2;
     float previous_giromin_data_value_ = 0;
     float previous_giromin_output_value_ = 0;
+
+    // Note on/off por botão
+    int   note_channel_    = 2;
+    int   note_for_btn_[2] = { 60, 62 };  // C4, D4
+    float prev_b1_raw_     = 0.f;
+    float prev_b2_raw_     = 0.f;
 
     // MSBs pendentes para montagem de pares 14-bit: msb_pending_[giromin_idx][cc_number]
     // -1 = nenhum MSB pendente para este campo
