@@ -52,11 +52,22 @@ private:
     juce::ComboBox noteB1Box;
     juce::ComboBox noteB2Box;
 
+    // ── Painel CC Output ─────────────────────────────────────────────────────
+    juce::Label      ccOutLabel     { {}, "CC Output" };
+    juce::TextButton ccOutEnableBtn { "Enable" };
+    juce::Label      ccSourceLabel  { {}, "Source" };
+    juce::ComboBox   ccSourceBox;
+    juce::Label      ccNumberLabel  { {}, "CC" };
+    juce::ComboBox   ccNumberBox;
+    juce::Label      ccRateLabel    { {}, "Rate (Hz)" };
+    juce::Slider     ccRateSlider;
+
     GirominController giromin_controller_;
 
     void setupSlider (juce::Slider& s, juce::Label& l, const juce::String& name);
     void populateNoteBox (juce::ComboBox& box, int defaultNote);
     void updateModeButtons();
+    void updateCCEnableButton();
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
 };

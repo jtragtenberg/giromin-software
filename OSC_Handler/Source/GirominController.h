@@ -25,7 +25,8 @@
 class GirominController
 {
 public:
-    enum class InputMode { OSC, MIDI };
+    enum class InputMode  { OSC, MIDI };
+    enum class CCSource   { AX, AY, AZ, GX, GY, GZ };
 
     // Todos os dados normalizados para [0,1] conforme midi_cc_map.h
     // Centro/repouso = 0.5 para accel e gyro; botões: 0.0 ou 1.0
@@ -98,10 +99,20 @@ public:
     }
 
     // ── Configuração de notas por botão ───────────────────────────────────────
-    void setNoteChannel (int ch)            { note_channel_ = juce::jlimit (1, 16, ch); }
+    void setNoteChannel (int ch)              { note_channel_ = juce::jlimit (1, 16, ch); }
     void setNoteForButton (int btn, int note) { note_for_btn_[btn] = juce::jlimit (0, 127, note); }
-    int  getNoteChannel()                   const { return note_channel_; }
-    int  getNoteForButton (int btn)         const { return note_for_btn_[btn]; }
+    int  getNoteChannel()               const { return note_channel_; }
+    int  getNoteForButton (int btn)     const { return note_for_btn_[btn]; }
+
+    // ── Configuração de CC output 14-bit ──────────────────────────────────────
+    void setCCOutEnabled (bool on)        { cc_out_enabled_ = on; }
+    void setCCOutSource  (CCSource src)   { cc_out_source_  = src; }
+    void setCCOutMSB     (int msb_cc)     { cc_out_msb_     = juce::jlimit (0, 31, msb_cc); }
+    void setCCOutRateHz  (int hz)         { cc_out_rate_hz_ = juce::jlimit (1, 200, hz); }
+    bool     getCCOutEnabled() const      { return cc_out_enabled_; }
+    CCSource getCCOutSource()  const      { return cc_out_source_; }
+    int      getCCOutMSB()     const      { return cc_out_msb_; }
+    int      getCCOutRateHz()  const      { return cc_out_rate_hz_; }
     
     GirominData* getGiromin (int index)
     {
@@ -167,6 +178,35 @@ private:
 
         processButtonNote (d.b1, prev_b1_raw_, 0);
         processButtonNote (d.b2, prev_b2_raw_, 1);
+
+        //===============================================================================================
+        // CC OUTPUT 14-bit
+        //===============================================================================================
+        if (cc_out_enabled_)
+        {
+            float src_val = 0.5f;
+            switch (cc_out_source_)
+            {
+                case CCSource::AX: src_val = d.ax; break;
+                case CCSource::AY: src_val = d.ay; break;
+                case CCSource::AZ: src_val = d.az; break;
+                case CCSource::GX: src_val = d.gx; break;
+                case CCSource::GY: src_val = d.gy; break;
+                case CCSource::GZ: src_val = d.gz; break;
+            }
+
+            double now_ms      = juce::Time::getMillisecondCounterHiRes();
+            double interval_ms = 1000.0 / cc_out_rate_hz_;
+            int    value14     = (int)(src_val * 16383.f);
+
+            if ((now_ms - cc_out_last_send_ms_) >= interval_ms
+                && value14 != cc_out_last_value14_)
+            {
+                midi_handler_.sendCC14 (note_channel_, cc_out_msb_, src_val);
+                cc_out_last_send_ms_  = now_ms;
+                cc_out_last_value14_  = value14;
+            }
+        }
     }
 
     // ── Decodificação de MIDI CC 14-bit → float normalizado ──────────────────
@@ -319,6 +359,14 @@ private:
     int   note_for_btn_[2] = { 60, 62 };  // C4, D4
     float prev_b1_raw_     = 0.f;
     float prev_b2_raw_     = 0.f;
+
+    // CC output 14-bit
+    bool     cc_out_enabled_      = false;
+    CCSource cc_out_source_       = CCSource::GX;
+    int      cc_out_msb_          = 1;      // Modulation Wheel por padrão
+    int      cc_out_rate_hz_      = 10;
+    double   cc_out_last_send_ms_ = 0.0;
+    int      cc_out_last_value14_ = -1;     // -1 força envio na primeira vez
 
     // MSBs pendentes para montagem de pares 14-bit: msb_pending_[giromin_idx][cc_number]
     // -1 = nenhum MSB pendente para este campo

@@ -80,6 +80,19 @@ public:
         }
     }
 
+    // ── Output: 14-bit CC (MSB + LSB pair) ───────────────────────────────────
+    // value01: normalised [0,1] input
+    // msb_cc:  MSB controller number (0-31); LSB is sent on msb_cc+32
+    void sendCC14 (int channel, int msb_cc, float value01)
+    {
+        if (midiOutputDevice == nullptr) return;
+        int value14 = juce::jlimit (0, 16383, (int)(value01 * 16383.f));
+        int msb = (value14 >> 7) & 0x7F;
+        int lsb =  value14       & 0x7F;
+        midiOutputDevice->sendMessageNow (juce::MidiMessage::controllerEvent (channel, msb_cc,      msb));
+        midiOutputDevice->sendMessageNow (juce::MidiMessage::controllerEvent (channel, msb_cc + 32, lsb));
+    }
+
     // ── Output: Note On / Note Off ────────────────────────────────────────────
     void sendNoteOn (int channel, int note, int velocity = 127)
     {

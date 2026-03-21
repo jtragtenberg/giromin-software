@@ -7,7 +7,7 @@ static const char* btnNames[]   = { "B1", "B2" };
 //==============================================================================
 MainComponent::MainComponent()
 {
-    setSize (700, 600);
+    setSize (700, 720);
 
     // ── Botões de modo ───────────────────────────────────────────────────────
     oscModeBtn .setClickingTogglesState (false);
@@ -69,7 +69,7 @@ MainComponent::MainComponent()
     }
 
     // ── Painel Note Output ───────────────────────────────────────────────────
-    noteOutputLabel.setFont (juce::Font (14.f, juce::Font::bold));
+    noteOutputLabel.setFont (juce::Font (juce::FontOptions().withHeight (14.f).withStyle ("Bold")));
     addAndMakeVisible (noteOutputLabel);
 
     for (auto* l : { &midiOutLabel, &noteChLabel, &noteB1Label, &noteB2Label })
@@ -126,6 +126,112 @@ MainComponent::MainComponent()
     };
     addAndMakeVisible (noteB2Box);
 
+    // ── Painel CC Output ─────────────────────────────────────────────────────
+    ccOutLabel.setFont (juce::Font (juce::FontOptions().withHeight (14.f).withStyle ("Bold")));
+    addAndMakeVisible (ccOutLabel);
+
+    for (auto* l : { &ccSourceLabel, &ccNumberLabel })
+    {
+        l->setJustificationType (juce::Justification::centredRight);
+        addAndMakeVisible (l);
+    }
+
+    // Enable toggle button
+    ccOutEnableBtn.setClickingTogglesState (true);
+    ccOutEnableBtn.onClick = [this]()
+    {
+        giromin_controller_.setCCOutEnabled (ccOutEnableBtn.getToggleState());
+        updateCCEnableButton();
+    };
+    addAndMakeVisible (ccOutEnableBtn);
+    updateCCEnableButton();
+
+    // Source selector
+    {
+        struct { const char* name; GirominController::CCSource src; } sources[] = {
+            { "Accel X",  GirominController::CCSource::AX },
+            { "Accel Y",  GirominController::CCSource::AY },
+            { "Accel Z",  GirominController::CCSource::AZ },
+            { "Gyro X",   GirominController::CCSource::GX },
+            { "Gyro Y",   GirominController::CCSource::GY },
+            { "Gyro Z",   GirominController::CCSource::GZ },
+        };
+        int id = 1;
+        for (auto& s : sources)
+            ccSourceBox.addItem (s.name, id++);
+
+        // Default: match cc_out_source_ (GX = index 4)
+        ccSourceBox.setSelectedId (4);
+        ccSourceBox.onChange = [this]()
+        {
+            GirominController::CCSource srcs[] = {
+                GirominController::CCSource::AX, GirominController::CCSource::AY,
+                GirominController::CCSource::AZ, GirominController::CCSource::GX,
+                GirominController::CCSource::GY, GirominController::CCSource::GZ
+            };
+            int sel = ccSourceBox.getSelectedId() - 1;
+            if (sel >= 0 && sel < 6)
+                giromin_controller_.setCCOutSource (srcs[sel]);
+        };
+        addAndMakeVisible (ccSourceBox);
+    }
+
+    // CC number selector — standard 14-bit CCs (MSB numbers only)
+    {
+        struct { const char* name; int msb; } cc14s[] = {
+            { "0 - Bank Select",       0  },
+            { "1 - Mod Wheel",         1  },
+            { "2 - Breath",            2  },
+            { "4 - Foot",              4  },
+            { "5 - Portamento Time",   5  },
+            { "6 - Data Entry",        6  },
+            { "7 - Channel Volume",    7  },
+            { "8 - Balance",           8  },
+            { "10 - Pan",              10 },
+            { "11 - Expression",       11 },
+            { "12 - Effect Ctrl 1",    12 },
+            { "13 - Effect Ctrl 2",    13 },
+            { "16 - Gen Purpose 1",    16 },
+            { "17 - Gen Purpose 2",    17 },
+            { "18 - Gen Purpose 3",    18 },
+            { "19 - Gen Purpose 4",    19 },
+        };
+        int defaultId = 1;
+        int id = 1;
+        for (auto& c : cc14s)
+        {
+            ccNumberBox.addItem (c.name, id);
+            if (c.msb == giromin_controller_.getCCOutMSB())
+                defaultId = id;
+            ++id;
+        }
+        ccNumberBox.setSelectedId (defaultId);
+
+        // Store MSB values for lookup in onChange
+        ccNumberBox.onChange = [this]()
+        {
+            int msbs[] = { 0,1,2,4,5,6,7,8,10,11,12,13,16,17,18,19 };
+            int sel = ccNumberBox.getSelectedId() - 1;
+            if (sel >= 0 && sel < 16)
+                giromin_controller_.setCCOutMSB (msbs[sel]);
+        };
+        addAndMakeVisible (ccNumberBox);
+    }
+
+    // Rate slider
+    ccRateLabel.setJustificationType (juce::Justification::centredRight);
+    addAndMakeVisible (ccRateLabel);
+
+    ccRateSlider.setRange (1, 200, 1);
+    ccRateSlider.setValue (giromin_controller_.getCCOutRateHz(), juce::dontSendNotification);
+    ccRateSlider.setSliderStyle (juce::Slider::LinearHorizontal);
+    ccRateSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 45, 20);
+    ccRateSlider.onValueChange = [this]()
+    {
+        giromin_controller_.setCCOutRateHz ((int)ccRateSlider.getValue());
+    };
+    addAndMakeVisible (ccRateSlider);
+
     // ── Callback de dados do sensor ──────────────────────────────────────────
     giromin_controller_.update_UI = [this](const GirominController::SensorDisplayData& d)
     {
@@ -173,6 +279,14 @@ void MainComponent::populateNoteBox (juce::ComboBox& box, int defaultNote)
         box.addItem (juce::MidiMessage::getMidiNoteName (n, true, true, 4), n + 1);
     }
     box.setSelectedId (defaultNote + 1);
+}
+
+void MainComponent::updateCCEnableButton()
+{
+    bool on = ccOutEnableBtn.getToggleState();
+    ccOutEnableBtn.setButtonText (on ? "Enabled" : "Enable");
+    ccOutEnableBtn.setColour (juce::TextButton::buttonColourId,
+                              on ? juce::Colours::limegreen : juce::Colours::darkgrey);
 }
 
 void MainComponent::updateModeButtons()
@@ -277,5 +391,42 @@ void MainComponent::resized()
         noteB2Label.setBounds (row.removeFromLeft (colLabelW));
         row.removeFromLeft (4);
         noteB2Box.setBounds (row.removeFromLeft (smallW));
+    }
+
+    area.removeFromTop (14);
+
+    // ── Painel CC Output ─────────────────────────────────────────────────────
+    {
+        auto headerRow = area.removeFromTop (20);
+        ccOutLabel.setBounds (headerRow.removeFromLeft (100));
+        headerRow.removeFromLeft (8);
+        ccOutEnableBtn.setBounds (headerRow.removeFromLeft (70));
+        area.removeFromTop (6);
+
+        // Source
+        {
+            auto row = area.removeFromTop (26);
+            area.removeFromTop (gap);
+            ccSourceLabel.setBounds (row.removeFromLeft (colLabelW));
+            row.removeFromLeft (4);
+            ccSourceBox.setBounds (row.removeFromLeft (colW));
+        }
+
+        // CC number
+        {
+            auto row = area.removeFromTop (26);
+            area.removeFromTop (gap);
+            ccNumberLabel.setBounds (row.removeFromLeft (colLabelW));
+            row.removeFromLeft (4);
+            ccNumberBox.setBounds (row.removeFromLeft (colW));
+        }
+
+        // Rate
+        {
+            auto row = area.removeFromTop (26);
+            ccRateLabel.setBounds (row.removeFromLeft (colLabelW));
+            row.removeFromLeft (4);
+            ccRateSlider.setBounds (row.removeFromLeft (colW + 60));
+        }
     }
 }
