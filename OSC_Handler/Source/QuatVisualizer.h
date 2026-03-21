@@ -55,6 +55,13 @@ public:
         yawOffset_.store (degrees * juce::MathConstants<float>::pi / 180.0f);
     }
 
+    // Gimbal-lock pole direction in viz local space (X=right, Y=forward, Z=up).
+    // Both antipodal points (+dir and -dir) are highlighted.
+    void setPoleDir (float px, float py, float pz)
+    {
+        poleX_.store (px); poleY_.store (py); poleZ_.store (pz);
+    }
+
     //==========================================================================
     void initialise() override
     {
@@ -160,6 +167,105 @@ public:
             }
 
             glBindVertexArray (0);
+        }
+
+        // ── Sphere wireframe shader ───────────────────────────────────────────
+        const char* sphVertSrc = R"(
+            #version 150
+            in vec3 position;
+            uniform mat3 uRotation;
+            uniform mat4 uProjection;
+            uniform vec3 uPoleDir;
+            out float vPoleBlend;
+            void main()
+            {
+                vec3 rp = uRotation * position;
+                gl_Position = uProjection * vec4(rp.x, rp.y, rp.z - 3.0, 1.0);
+                float d = abs(dot(normalize(position), uPoleDir));
+                vPoleBlend = smoothstep(0.82, 1.0, d);
+            }
+        )";
+        const char* sphFragSrc = R"(
+            #version 150
+            in float vPoleBlend;
+            out vec4 fragColor;
+            void main()
+            {
+                fragColor = mix(vec4(0.7, 0.7, 0.7, 0.18),
+                                vec4(1.0, 0.15, 0.15, 0.85),
+                                vPoleBlend);
+            }
+        )";
+
+        sphereShader_ = std::make_unique<juce::OpenGLShaderProgram> (openGLContext);
+        if (sphereShader_->addVertexShader (sphVertSrc) &&
+            sphereShader_->addFragmentShader (sphFragSrc) &&
+            sphereShader_->link())
+        {
+            uSphRotation_   = glGetUniformLocation (sphereShader_->getProgramID(), "uRotation");
+            uSphProjection_ = glGetUniformLocation (sphereShader_->getProgramID(), "uProjection");
+            uSphPoleDir_    = glGetUniformLocation (sphereShader_->getProgramID(), "uPoleDir");
+            GLint sphPosLoc = glGetAttribLocation  (sphereShader_->getProgramID(), "position");
+
+            // ── Sphere wireframe geometry (xyz only) ─────────────────────────
+            const float sR  = 0.85f;
+            const int nLat  = 10;   // latitude rings
+            const int nLon  = 16;   // longitude lines
+            const int nSeg  = 32;   // segments per circle
+            const float pi  = juce::MathConstants<float>::pi;
+
+            std::vector<float> sv;
+
+            // Latitude rings (horizontal)
+            for (int i = 1; i < nLat; ++i)
+            {
+                float phi = pi * i / nLat;
+                float ry = sR * std::cos (phi), rr = sR * std::sin (phi);
+                for (int j = 0; j < nSeg; ++j)
+                {
+                    float t0 = 2*pi * j / nSeg, t1 = 2*pi * (j+1) / nSeg;
+                    sv.insert (sv.end(), { rr*std::cos(t0), ry, rr*std::sin(t0) });
+                    sv.insert (sv.end(), { rr*std::cos(t1), ry, rr*std::sin(t1) });
+                }
+            }
+
+            // Longitude lines (vertical)
+            for (int j = 0; j < nLon; ++j)
+            {
+                float theta = 2*pi * j / nLon;
+                float cx = std::cos (theta), cz = std::sin (theta);
+                for (int i = 0; i < nSeg; ++i)
+                {
+                    float p0 = pi * i / nSeg, p1 = pi * (i+1) / nSeg;
+                    sv.insert (sv.end(), { sR*std::sin(p0)*cx, sR*std::cos(p0), sR*std::sin(p0)*cz });
+                    sv.insert (sv.end(), { sR*std::sin(p1)*cx, sR*std::cos(p1), sR*std::sin(p1)*cz });
+                }
+            }
+
+            numSphereVerts_ = (int)sv.size() / 3;
+
+            glGenVertexArrays (1, &sphereVao_);
+            glBindVertexArray (sphereVao_);
+
+            glGenBuffers (1, &sphereVbo_);
+            glBindBuffer (GL_ARRAY_BUFFER, sphereVbo_);
+            glBufferData (GL_ARRAY_BUFFER,
+                          (GLsizeiptr)(sv.size() * sizeof (float)),
+                          sv.data(), GL_STATIC_DRAW);
+
+            if (sphPosLoc >= 0)
+            {
+                glEnableVertexAttribArray ((GLuint)sphPosLoc);
+                glVertexAttribPointer ((GLuint)sphPosLoc, 3, GL_FLOAT, GL_FALSE,
+                                       3 * (GLsizei)sizeof (float), (void*)0);
+            }
+
+            glBindVertexArray (0);
+        }
+        else
+        {
+            DBG ("QuatVisualizer sphere shader error: " + sphereShader_->getLastError());
+            sphereShader_.reset();
         }
 
         // ── Geometry: interleaved [px,py,pz, nx,ny,nz] per vertex ────────────
@@ -290,13 +396,7 @@ public:
                 }
         };
 
-        // Compose: totalQ = mouseQ * sensorQ
-        const float sw = qw_.load(), sx = qx_.load(), sy = qy_.load(), sz = qz_.load();
-        const float mw = mw_.load(), mx = mx_.load(), my = my_.load(), mz = mz_.load();
-        const float w = mw*sw - mx*sx - my*sy - mz*sz;
-        const float x = mw*sx + mx*sw + my*sz - mz*sy;
-        const float y = mw*sy - mx*sz + my*sw + mz*sx;
-        const float z = mw*sz + mx*sy - my*sx + mz*sw;
+        const float w = qw_.load(), x = qx_.load(), y = qy_.load(), z = qz_.load();
 
         // Quaternion → column-major mat3
         const float quatRot[9] = {
@@ -347,6 +447,27 @@ public:
         glDrawElements (GL_TRIANGLES, numIndices_, GL_UNSIGNED_INT, nullptr);
         glBindVertexArray (0);
 
+        // Draw sphere wireframe — fixed world frame, poles colored by gimbal-lock direction
+        if (sphereShader_ != nullptr && sphereVao_ != 0)
+        {
+            glEnable (GL_BLEND);
+            glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+            glDepthMask (GL_FALSE);
+
+            sphereShader_->use();
+            glUniformMatrix3fv (uSphRotation_,   1, GL_FALSE, kBaseRot);
+            glUniformMatrix4fv (uSphProjection_, 1, GL_FALSE, proj);
+            const float pole[3] = { poleX_.load(), poleY_.load(), poleZ_.load() };
+            glUniform3fv (uSphPoleDir_, 1, pole);
+
+            glBindVertexArray (sphereVao_);
+            glDrawArrays (GL_LINES, 0, numSphereVerts_);
+            glBindVertexArray (0);
+
+            glDepthMask (GL_TRUE);
+            glDisable (GL_BLEND);
+        }
+
         // Draw axes — fixed world frame (kBaseRot only, no quaternion)
         // X=red, Y=green (into screen), Z=blue (up)
         if (axisShader_ != nullptr && axisVao_ != 0)
@@ -376,8 +497,11 @@ public:
         if (vao_)     { glDeleteVertexArrays (1, &vao_);     vao_     = 0; }
         if (vbo_)     { glDeleteBuffers (1, &vbo_);          vbo_     = 0; }
         if (ebo_)     { glDeleteBuffers (1, &ebo_);          ebo_     = 0; }
-        if (axisVao_) { glDeleteVertexArrays (1, &axisVao_); axisVao_ = 0; }
-        if (axisVbo_) { glDeleteBuffers (1, &axisVbo_);      axisVbo_ = 0; }
+        if (axisVao_)   { glDeleteVertexArrays (1, &axisVao_);   axisVao_   = 0; }
+        if (axisVbo_)   { glDeleteBuffers (1, &axisVbo_);        axisVbo_   = 0; }
+        sphereShader_.reset();
+        if (sphereVao_) { glDeleteVertexArrays (1, &sphereVao_); sphereVao_ = 0; }
+        if (sphereVbo_) { glDeleteBuffers (1, &sphereVbo_);      sphereVbo_ = 0; }
         numIndices_ = 0;
     }
 
@@ -424,49 +548,10 @@ public:
         }
     }
 
-    //==========================================================================
-    void mouseDown (const juce::MouseEvent& e) override
-    {
-        lastMousePos_ = e.position;
-    }
-
-    void mouseDrag (const juce::MouseEvent& e) override
-    {
-        const float dx = (float)(e.position.x - lastMousePos_.x);
-        const float dy = (float)(e.position.y - lastMousePos_.y);
-        lastMousePos_ = e.position;
-
-        const float sensitivity = 0.005f;
-        const float angleY = dx * sensitivity;   // drag X → yaw  (rotate around Y)
-        const float angleX = dy * sensitivity;   // drag Y → pitch (rotate around X)
-
-        // Incremental quaternion for yaw (Y axis)
-        const float sy = std::sin (angleY * 0.5f), cy = std::cos (angleY * 0.5f);
-        // Incremental quaternion for pitch (X axis)
-        const float sp = std::sin (angleX * 0.5f), cp = std::cos (angleX * 0.5f);
-
-        // Combined: qPitch * qYaw  (applied left-to-right)
-        // qYaw  = (cy, 0, sy, 0)  [w,x,y,z]
-        // qPitch = (cp, sp, 0, 0)
-        // product qPitch * qYaw:
-        float nw = cp*cy,  nx = sp*cy,  ny = cp*sy,  nz = -sp*sy;
-
-        // Compose with accumulated mouse rotation: mq = nq * mq
-        const float mw = mw_.load(), mx = mx_.load(), my = my_.load(), mz = mz_.load();
-        mw_.store (nw*mw - nx*mx - ny*my - nz*mz);
-        mx_.store (nw*mx + nx*mw + ny*mz - nz*my);
-        my_.store (nw*my - nx*mz + ny*mw + nz*mx);
-        mz_.store (nw*mz + nx*my - ny*mx + nz*mw);
-    }
-
 private:
     // Sensor quaternion
     std::atomic<float> qw_ {1.0f}, qx_ {0.0f}, qy_ {0.0f}, qz_ {0.0f};
     std::atomic<float> yawOffset_ {0.0f};
-    // Mouse-drag accumulated rotation quaternion
-    std::atomic<float> mw_ {1.0f}, mx_ {0.0f}, my_ {0.0f}, mz_ {0.0f};
-
-    juce::Point<float> lastMousePos_;
 
     std::unique_ptr<juce::OpenGLShaderProgram> shader_;
     GLuint vao_ = 0, vbo_ = 0, ebo_ = 0;
@@ -476,4 +561,12 @@ private:
     std::unique_ptr<juce::OpenGLShaderProgram> axisShader_;
     GLuint axisVao_ = 0, axisVbo_ = 0;
     GLint  uAxisRotation_ = -1, uAxisProjection_ = -1, uAxisColor_ = -1;
+
+    std::unique_ptr<juce::OpenGLShaderProgram> sphereShader_;
+    GLuint sphereVao_ = 0, sphereVbo_ = 0;
+    int    numSphereVerts_ = 0;
+    GLint  uSphRotation_ = -1, uSphProjection_ = -1, uSphPoleDir_ = -1;
+
+    // Gimbal-lock pole direction (viz local space: X=right, Y=forward, Z=up)
+    std::atomic<float> poleX_ {0.0f}, poleY_ {0.0f}, poleZ_ {1.0f};
 };

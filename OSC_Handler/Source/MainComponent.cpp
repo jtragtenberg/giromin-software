@@ -621,6 +621,42 @@ void MainComponent::timerCallback()
     };
     for (int i = 0; i < 3; ++i)
         eulerLabels_[i].setText (orderLabels[oi][i], juce::dontSendNotification);
+
+    // ── Gimbal-lock pole direction → QuatVisualizer ──────────────────────────
+    // Middle axis index per order: XYZ→Y(1), XZY→Z(2), YXZ→X(0), YZX→Z(2), ZXY→X(0), ZYX→Y(1)
+    static const int kMidAxis[6] = { 1, 2, 0, 2, 0, 1 };
+    const int midAxis = kMidAxis[oi];
+
+    // Unit vector of that axis in the decomposition frame → viz local frame
+    // Raw source:      sensor X→vizX, sensor Y→viz(-Z), sensor Z→vizY
+    // Remapped source: already in viz frame
+    // With Yaw source: remapped rotated around Y by yaw (as implemented in timerCallback)
+    float px = 0.f, py = 0.f, pz = 0.f;
+
+    if (eulerSourceBox_.getSelectedId() == 1) // Raw
+    {
+        // sensor basis mapped to viz local: sX→vX, sY→v(-Z), sZ→vY
+        if      (midAxis == 0) { px = 1.f; py = 0.f; pz =  0.f; }   // sensor X → viz X
+        else if (midAxis == 1) { px = 0.f; py = 0.f; pz = -1.f; }   // sensor Y → viz -Z
+        else                   { px = 0.f; py = 1.f; pz =  0.f; }   // sensor Z → viz Y
+    }
+    else // Remapped or With Yaw — axis is already in viz frame
+    {
+        if      (midAxis == 0) { px = 1.f; py = 0.f; pz = 0.f; }
+        else if (midAxis == 1) { px = 0.f; py = 1.f; pz = 0.f; }
+        else                   { px = 0.f; py = 0.f; pz = 1.f; }
+
+        if (eulerSourceBox_.getSelectedId() == 3) // With Yaw: rotate pole around Y
+        {
+            float yawRad = (float)(yawSlider_.getValue() * juce::MathConstants<double>::pi / 180.0);
+            float cy = std::cos (yawRad), sy = std::sin (yawRad);
+            float nx =  cy * px + sy * pz;
+            float nz = -sy * px + cy * pz;
+            px = nx; pz = nz;
+        }
+    }
+
+    quatViz_.setPoleDir (px, py, pz);
 }
 
 //==============================================================================
