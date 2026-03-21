@@ -3,6 +3,7 @@
 #include <JuceHeader.h>
 
 #include "GirominController.h"
+#include "QuatVisualizer.h"
 
 //==============================================================================
 /*
@@ -12,7 +13,8 @@
 
 class MainComponent
 :
-public juce::Component
+public juce::Component,
+public juce::Timer
 {
 public:
     //==============================================================================
@@ -65,6 +67,17 @@ private:
 
     void updateCC14bitButton();
 
+    QuatVisualizer   quatViz_;
+    juce::Slider     yawSlider_;
+    juce::Label      yawLabel_    { {}, "Yaw offset" };
+    juce::Label      quatLabel_;   // W X Y Z display (single line)
+    juce::Slider     fpsSlider_;
+    juce::Label      fpsLabel_  { {}, "FPS" };
+
+    GirominController::SensorDisplayData latestData_;
+
+    void timerCallback() override;
+    void setDisplayFPS (int fps);
     GirominController giromin_controller_;
 
     juce::ApplicationProperties appProperties_;

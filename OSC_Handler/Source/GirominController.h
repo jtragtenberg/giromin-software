@@ -35,6 +35,7 @@ public:
         float ax = 0.5f, ay = 0.5f, az = 0.5f;
         float gx = 0.5f, gy = 0.5f, gz = 0.5f;
         float b1 = 0.f,  b2 = 0.f;
+        float qw = 1.f,  qx = 0.f, qy = 0.f, qz = 0.f;
     };
 
     std::function<void(const SensorDisplayData&)> update_UI;
@@ -146,6 +147,10 @@ private:
         d.gz = raw_to_01 (g->getGZ(), G_NORMALISATION_CONSTANT);
         d.b1 = g->getB1();
         d.b2 = g->getB2();
+        d.qw = g->getQ1();
+        d.qx = g->getQ2();
+        d.qy = g->getQ3();
+        d.qz = g->getQ4();
 
         if (update_UI) update_UI (d);
 

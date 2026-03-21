@@ -7,7 +7,7 @@ static const char* btnNames[]   = { "B1", "B2" };
 //==============================================================================
 MainComponent::MainComponent()
 {
-    setSize (700, 720);
+    setSize (700, 800);
 
     // ── Persistência de configurações ────────────────────────────────────────
     juce::PropertiesFile::Options opts;
@@ -230,6 +230,7 @@ MainComponent::MainComponent()
 
     ccRateSlider.setRange (1, 200, 1);
     ccRateSlider.setValue (giromin_controller_.getCCOutRateHz(), juce::dontSendNotification);
+    ccRateSlider.setDoubleClickReturnValue (true, 10.0);
     ccRateSlider.setSliderStyle (juce::Slider::LinearHorizontal);
     ccRateSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 45, 20);
     ccRateSlider.onValueChange = [this]()
@@ -251,29 +252,49 @@ MainComponent::MainComponent()
     addAndMakeVisible (cc14bitBtn);
     updateCC14bitButton();
 
-    // ── Callback de dados do sensor ──────────────────────────────────────────
+    // ── Callback de dados do sensor — apenas cacheia, timer faz o display ────
     giromin_controller_.update_UI = [this](const GirominController::SensorDisplayData& d)
     {
-        juce::MessageManager::callAsync ([this, d]()
-        {
-            accelSliders[0].setValue (d.ax, juce::dontSendNotification);
-            accelSliders[1].setValue (d.ay, juce::dontSendNotification);
-            accelSliders[2].setValue (d.az, juce::dontSendNotification);
-
-            gyroSliders[0].setValue (d.gx, juce::dontSendNotification);
-            gyroSliders[1].setValue (d.gy, juce::dontSendNotification);
-            gyroSliders[2].setValue (d.gz, juce::dontSendNotification);
-
-            auto btnColour = [](bool on) {
-                return on ? juce::Colours::limegreen : juce::Colours::darkgrey;
-            };
-            btnToggles[0].setColour (juce::TextButton::buttonColourId, btnColour (d.b1 > 0.5f));
-            btnToggles[1].setColour (juce::TextButton::buttonColourId, btnColour (d.b2 > 0.5f));
-        });
+        juce::MessageManager::callAsync ([this, d]() { latestData_ = d; });
     };
+
+    addAndMakeVisible (quatViz_);
+
+    // ── Yaw offset slider ────────────────────────────────────────────────────
+    yawSlider_.setRange (-180.0, 180.0, 1.0);
+    yawSlider_.setValue (0.0, juce::dontSendNotification);
+    yawSlider_.setDoubleClickReturnValue (true, 0.0);
+    yawSlider_.setSliderStyle (juce::Slider::LinearHorizontal);
+    yawSlider_.setTextBoxStyle (juce::Slider::TextBoxRight, false, 45, 20);
+    yawSlider_.onValueChange = [this]()
+    {
+        quatViz_.setYawOffset ((float)yawSlider_.getValue());
+    };
+    addAndMakeVisible (yawSlider_);
+
+    yawLabel_.setJustificationType (juce::Justification::centredLeft);
+    addAndMakeVisible (yawLabel_);
+
+    // ── FPS slider ────────────────────────────────────────────────────────────
+    fpsSlider_.setRange (10.0, 60.0, 1.0);
+    fpsSlider_.setValue (30.0, juce::dontSendNotification);
+    fpsSlider_.setDoubleClickReturnValue (true, 30.0);
+    fpsSlider_.setSliderStyle (juce::Slider::LinearHorizontal);
+    fpsSlider_.setTextBoxStyle (juce::Slider::TextBoxRight, false, 35, 20);
+    fpsSlider_.onValueChange = [this]() { setDisplayFPS ((int)fpsSlider_.getValue()); };
+    addAndMakeVisible (fpsSlider_);
+
+    fpsLabel_.setJustificationType (juce::Justification::centredLeft);
+    addAndMakeVisible (fpsLabel_);
+
+    // ── Quaternion display label (single monospace line) ─────────────────────
+    quatLabel_.setFont (juce::Font (juce::Font::getDefaultMonospacedFontName(), 13.f, juce::Font::plain));
+    quatLabel_.setText ("Quat: +1.0  +0.0  +0.0  +0.0", juce::dontSendNotification);
+    addAndMakeVisible (quatLabel_);
 
     updateModeButtons();
     loadSettings();
+    setDisplayFPS (30);
 }
 
 MainComponent::~MainComponent() {}
@@ -447,6 +468,43 @@ void MainComponent::updateModeButtons()
 }
 
 //==============================================================================
+void MainComponent::setDisplayFPS (int fps)
+{
+    fps = juce::jlimit (10, 60, fps);
+    quatViz_.setUpdateFPS (fps);
+    startTimerHz (fps);
+}
+
+void MainComponent::timerCallback()
+{
+    const auto& d = latestData_;
+
+    accelSliders[0].setValue (d.ax, juce::dontSendNotification);
+    accelSliders[1].setValue (d.ay, juce::dontSendNotification);
+    accelSliders[2].setValue (d.az, juce::dontSendNotification);
+
+    gyroSliders[0].setValue (d.gx, juce::dontSendNotification);
+    gyroSliders[1].setValue (d.gy, juce::dontSendNotification);
+    gyroSliders[2].setValue (d.gz, juce::dontSendNotification);
+
+    auto btnColour = [](bool on) {
+        return on ? juce::Colours::limegreen : juce::Colours::darkgrey;
+    };
+    btnToggles[0].setColour (juce::TextButton::buttonColourId, btnColour (d.b1 > 0.5f));
+    btnToggles[1].setColour (juce::TextButton::buttonColourId, btnColour (d.b2 > 0.5f));
+
+    // Remap sensor frame (X=right, Y=up, Z=forward)
+    //   → visualizer frame (X=right, Y=forward, Z=up)
+    // Swap sensor Y↔Z; negate new Z to preserve right-handedness
+    quatViz_.setQuaternion (d.qw, d.qx, d.qz, -d.qy);
+
+    quatLabel_.setText (
+        juce::String::formatted ("Quat:%+5.1f %+5.1f %+5.1f %+5.1f",
+                                 d.qw, d.qx, d.qy, d.qz),
+        juce::dontSendNotification);
+}
+
+//==============================================================================
 void MainComponent::paint (juce::Graphics& g)
 {
     g.fillAll (getLookAndFeel().findColour (juce::ResizableWindow::backgroundColourId));
@@ -456,7 +514,9 @@ void MainComponent::resized()
 {
     auto area = getLocalBounds().reduced (10);
 
-    // ── Barra de modo ────────────────────────────────────────────────────────
+    // ── INPUT section ────────────────────────────────────────────────────────
+
+    // Mode bar (full width, inside input)
     auto topBar = area.removeFromTop (30);
     oscModeBtn .setBounds (topBar.removeFromLeft (60));
     topBar.removeFromLeft (6);
@@ -470,31 +530,60 @@ void MainComponent::resized()
     const int rowH   = 34;
     const int gap    = 4;
 
+    // Height for 6 sliders + buttons
+    const int inputAreaH = 3 * (rowH + gap) + 10 + 3 * (rowH + gap) + 10 + 36;  // ~300
+
+    auto inputArea = area.removeFromTop (inputAreaH);
+
+    // Left: quaternion visualizer + yaw slider below it
+    auto vizArea = inputArea.removeFromLeft (280);
+    inputArea.removeFromLeft (10);
+
+    const int yawRowH  = 28;
+    const int quatRowH = 20;
+    const int fpsRowH  = 28;
+
+    // Reserve space bottom-up: fps, 4 quat labels, yaw slider
+    {
+        auto fpsRow = vizArea.removeFromBottom (fpsRowH);
+        fpsLabel_.setBounds (fpsRow.removeFromLeft (30));
+        fpsSlider_.setBounds (fpsRow);
+    }
+
+    quatLabel_.setBounds (vizArea.removeFromBottom (quatRowH));
+
+    auto yawRow = vizArea.removeFromBottom (yawRowH);
+    yawLabel_.setBounds (yawRow.removeFromLeft (70));
+    yawSlider_.setBounds (yawRow);
+
+    quatViz_.setBounds (vizArea);
+
+    // Right: sliders + buttons
     // ── Acelerômetro ─────────────────────────────────────────────────────────
     for (int i = 0; i < 3; ++i)
     {
-        auto row = area.removeFromTop (rowH);
-        area.removeFromTop (gap);
+        auto row = inputArea.removeFromTop (rowH);
+        inputArea.removeFromTop (gap);
         accelLabels[i].setBounds (row.removeFromLeft (labelW));
         accelSliders[i].setBounds (row);
     }
 
-    area.removeFromTop (10);
+    inputArea.removeFromTop (10);
 
     // ── Giroscópio ───────────────────────────────────────────────────────────
     for (int i = 0; i < 3; ++i)
     {
-        auto row = area.removeFromTop (rowH);
-        area.removeFromTop (gap);
+        auto row = inputArea.removeFromTop (rowH);
+        inputArea.removeFromTop (gap);
         gyroLabels[i].setBounds (row.removeFromLeft (labelW));
         gyroSliders[i].setBounds (row);
     }
 
-    area.removeFromTop (10);
+    inputArea.removeFromTop (10);
 
     // ── Botões ───────────────────────────────────────────────────────────────
     {
-        auto row = area.removeFromTop (36);
+        auto row = inputArea.removeFromTop (36);
         btnToggles[0].setBounds (row.removeFromLeft (80));
         row.removeFromLeft (10);
         btnToggles[1].setBounds (row.removeFromLeft (80));
