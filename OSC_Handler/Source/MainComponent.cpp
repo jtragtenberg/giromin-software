@@ -361,7 +361,15 @@ void MainComponent::setupCCPanel (int i)
     ccSourceBoxes_[i].addItem ("Euler 2",   8);
     ccSourceBoxes_[i].addItem ("Euler 3",   9);
     ccSourceBoxes_[i].setSelectedId ((int)giromin_controller_.getCCOutSource (i) + 1);
-    ccSourceBoxes_[i].onChange = [this, i]()
+    static const char* srcShortNames[] = { "AX","AY","AZ","GX","GY","GZ","E1","E2","E3" };
+    auto updateKnobLabel = [this, i]()
+    {
+        int sel = ccSourceBoxes_[i].getSelectedId() - 1;
+        if (sel >= 0 && sel < 9)
+            ccRangeKnobs_[i].setCentreLabel (srcShortNames[sel]);
+    };
+
+    ccSourceBoxes_[i].onChange = [this, i, updateKnobLabel]()
     {
         using S = GirominController::CCSource;
         static const S srcs[] = { S::AX, S::AY, S::AZ, S::GX, S::GY, S::GZ,
@@ -369,8 +377,10 @@ void MainComponent::setupCCPanel (int i)
         int sel = ccSourceBoxes_[i].getSelectedId() - 1;
         if (sel >= 0 && sel < 9)
             giromin_controller_.setCCOutSource (i, srcs[sel]);
+        updateKnobLabel();
         saveSettings();
     };
+    updateKnobLabel();
     addAndMakeVisible (ccSourceBoxes_[i]);
 
     for (int msb = 0; msb < 32; ++msb)
@@ -393,6 +403,21 @@ void MainComponent::setupCCPanel (int i)
     };
     addAndMakeVisible (cc14bitBtns_[i]);
     updateCC14bitButton (i);
+
+    // ── Range knob ────────────────────────────────────────────────────────
+    ccRangeKnobs_[i].setNormalizedRange (giromin_controller_.getCCOutRangeMin (i),
+                                         giromin_controller_.getCCOutRangeMax (i));
+    ccRangeKnobs_[i].onRangeChanged = [this, i](float lo, float hi)
+    {
+        giromin_controller_.setCCOutRange (i, lo, hi);
+        saveSettings();
+    };
+    addAndMakeVisible (ccRangeKnobs_[i]);
+
+    ccOutValueLabels_[i].setJustificationType (juce::Justification::centred);
+    ccOutValueLabels_[i].setFont (juce::Font (juce::Font::getDefaultMonospacedFontName(), 13.f, juce::Font::plain));
+    ccOutValueLabels_[i].setText ("---", juce::dontSendNotification);
+    addAndMakeVisible (ccOutValueLabels_[i]);
 }
 
 void MainComponent::saveSettings()
