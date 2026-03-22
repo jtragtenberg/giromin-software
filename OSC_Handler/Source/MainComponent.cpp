@@ -454,15 +454,24 @@ void MainComponent::saveSettings()
     p->setValue ("noteB1",       giromin_controller_.getNoteForButton (0));
     p->setValue ("noteB2",       giromin_controller_.getNoteForButton (1));
 
-    for (int i = 0; i < 3; ++i)
+    p->setValue ("numCCPanels", numCCPanels_);
+
+    for (int i = 0; i < numCCPanels_; ++i)
     {
         juce::String k = "cc" + juce::String (i);
         p->setValue (k + "Enabled", giromin_controller_.getCCOutEnabled (i));
         p->setValue (k + "14bit",   giromin_controller_.getCCOut14bit   (i));
         p->setValue (k + "Source",  (int)giromin_controller_.getCCOutSource (i));
         p->setValue (k + "MSB",     giromin_controller_.getCCOutMSB     (i));
-        p->setValue (k + "RateHz",  giromin_controller_.getCCOutRateHz  (i));
+        p->setValue (k + "RangeMin", giromin_controller_.getCCOutRangeMin (i));
+        p->setValue (k + "RangeMax", giromin_controller_.getCCOutRangeMax (i));
     }
+
+    p->setValue ("midiRateHz",   (int) midiRateSlider_.getValue());
+    p->setValue ("eulerOrder",   eulerOrderBox_.getSelectedId());
+    p->setValue ("eulerSource",  eulerSourceBox_.getSelectedId());
+    p->setValue ("eulerCenter0", eulerCenter_[0]);
+    p->setValue ("eulerCenter1", eulerCenter_[1]);
 
     p->saveIfNeeded();
 }
@@ -520,8 +529,16 @@ void MainComponent::loadSettings()
     noteB1Box.setSelectedId (n1 + 1, juce::dontSendNotification);
     noteB2Box.setSelectedId (n2 + 1, juce::dontSendNotification);
 
-    // CC outputs (3 channels)
-    for (int i = 0; i < 3; ++i)
+    // Restore CC panel count and setup any extra panels
+    {
+        int saved = juce::jlimit (3, kMaxCCPanels, p->getIntValue ("numCCPanels", 3));
+        for (int i = numCCPanels_; i < saved; ++i)
+            setupCCPanel (i);
+        numCCPanels_ = saved;
+    }
+
+    // CC outputs
+    for (int i = 0; i < numCCPanels_; ++i)
     {
         juce::String k = "cc" + juce::String (i);
 
@@ -549,10 +566,23 @@ void MainComponent::loadSettings()
         giromin_controller_.setCCOutMSB (i, msb);
         ccNumberBoxes_[i].setSelectedId (msb + 1, juce::dontSendNotification);
 
-        int rateHz = p->getIntValue (k + "RateHz", 10);
-        giromin_controller_.setCCOutRateHz (i, rateHz);
-        ccRateSliders_[i].setValue (rateHz, juce::dontSendNotification);
+        float rMin = (float) p->getDoubleValue (k + "RangeMin", 0.0);
+        float rMax = (float) p->getDoubleValue (k + "RangeMax", 1.0);
+        giromin_controller_.setCCOutRange (i, rMin, rMax);
+        ccRangeKnobs_[i].setNormalizedRange (rMin, rMax);
     }
+
+    {
+        int hz = p->getIntValue ("midiRateHz", 10);
+        midiRateSlider_.setValue (hz, juce::dontSendNotification);
+        for (int i = 0; i < 3; ++i)
+            giromin_controller_.setCCOutRateHz (i, hz);
+    }
+
+    eulerOrderBox_ .setSelectedId (p->getIntValue ("eulerOrder",  1), juce::dontSendNotification);
+    eulerSourceBox_.setSelectedId (p->getIntValue ("eulerSource", 1), juce::dontSendNotification);
+    eulerCenter_[0] = (float) p->getDoubleValue ("eulerCenter0", 0.0);
+    eulerCenter_[1] = (float) p->getDoubleValue ("eulerCenter1", 0.0);
 }
 
 void MainComponent::updateModeButtons()
