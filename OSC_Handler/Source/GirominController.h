@@ -160,11 +160,17 @@ public:
                 case CCSource::EULER3: srcVal = juce::jlimit (-1.f, 1.f, e3 / (pi * 0.5f)); break;
             }
 
-            // Apply input sub-range mapping: [rangeMin, rangeMax] → [0, 1]
-            // Works for both normal (min < max) and inverted (min > max) ranges.
-            float span = cfg.rangeMax - cfg.rangeMin;
-            if (std::abs (span) > 0.001f)
-                srcVal = juce::jlimit (0.f, 1.f, (srcVal - cfg.rangeMin) / span);
+            // Gesture: scale & clamp input sub-range → [0, 1]
+            // Inverted range (rangeMin > rangeMax) reverses the output.
+            {
+                float lo = std::min (cfg.rangeMin, cfg.rangeMax);
+                float hi = std::max (cfg.rangeMin, cfg.rangeMax);
+                if (hi - lo > 0.001f)
+                {
+                    srcVal = IMUGestureToolkit::scaleAndClamp (srcVal, lo, hi, 0.f, 1.f);
+                    if (cfg.rangeMin > cfg.rangeMax) srcVal = 1.f - srcVal;
+                }
+            }
 
             double interval_ms = 1000.0 / cfg.rateHz;
             int    val14 = (int)(srcVal * 16383.f);

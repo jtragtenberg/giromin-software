@@ -4,52 +4,6 @@ static const char* accelNames[] = { "AX", "AY", "AZ" };
 static const char* gyroNames[]  = { "GX", "GY", "GZ" };
 static const char* btnNames[]   = { "B1", "B2" };
 
-// Returns {a_first, a_last, a_mid_constrained} for the given Tait-Bryan order index.
-// Order indices: 0=XYZ, 1=XZY, 2=YXZ, 3=YZX, 4=ZXY, 5=ZYX
-static std::array<float, 3> eulerFromQuat (float w, float x, float y, float z, int orderIdx)
-{
-    // Rotation matrix elements (row, col)
-    float xx = x*x, yy = y*y, zz = z*z;
-    float r00 = 1.f - 2.f*(yy+zz),  r01 = 2.f*(x*y - w*z),  r02 = 2.f*(x*z + w*y);
-    float r10 = 2.f*(x*y + w*z),     r11 = 1.f - 2.f*(xx+zz), r12 = 2.f*(y*z - w*x);
-    float r20 = 2.f*(x*z - w*y),     r21 = 2.f*(y*z + w*x),   r22 = 1.f - 2.f*(xx+yy);
-
-    float a_first, a_last, a_mid;
-    switch (orderIdx)
-    {
-        case 0: // XYZ
-            a_mid   = std::asin  (juce::jlimit (-1.f, 1.f,  r02));
-            a_first = std::atan2 (-r12, r22);
-            a_last  = std::atan2 (-r01, r00);
-            break;
-        case 1: // XZY
-            a_mid   = std::asin  (juce::jlimit (-1.f, 1.f, -r01));
-            a_first = std::atan2 ( r21, r11);
-            a_last  = std::atan2 ( r02, r00);
-            break;
-        case 2: // YXZ
-            a_mid   = std::asin  (juce::jlimit (-1.f, 1.f, -r12));
-            a_first = std::atan2 ( r02, r22);
-            a_last  = std::atan2 ( r10, r11);
-            break;
-        case 3: // YZX
-            a_mid   = std::asin  (juce::jlimit (-1.f, 1.f,  r10));
-            a_first = std::atan2 (-r20, r00);
-            a_last  = std::atan2 (-r12, r11);
-            break;
-        case 4: // ZXY
-            a_mid   = std::asin  (juce::jlimit (-1.f, 1.f,  r21));
-            a_first = std::atan2 (-r01, r11);
-            a_last  = std::atan2 (-r20, r22);
-            break;
-        default: // ZYX (5)
-            a_mid   = std::asin  (juce::jlimit (-1.f, 1.f, -r20));
-            a_first = std::atan2 ( r10, r00);
-            a_last  = std::atan2 ( r21, r22);
-            break;
-    }
-    return { a_first, a_last, a_mid };
-}
 
 //==============================================================================
 MainComponent::MainComponent()
@@ -691,7 +645,8 @@ void MainComponent::timerCallback()
             ew = d.qw; ex = d.qx; ey = d.qy; ez = d.qz;
             break;
     }
-    auto euler = eulerFromQuat (ew, ex, ey, ez, oi);
+    auto euler = IMUGestureToolkit::convertQuaternionToEuler (ew, ex, ey, ez,
+                     static_cast<IMUGestureToolkit::TaitBryanOrder> (oi));
 
     // Apply center offset for E1 and E2: subtract offset, then wrap to [-π, π]
     // This prevents the active range from being split by the ±π discontinuity.
