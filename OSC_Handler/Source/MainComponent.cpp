@@ -176,6 +176,7 @@ MainComponent::MainComponent()
     midiRateSlider_.setDoubleClickReturnValue (true, 10.0);
     midiRateSlider_.setSliderStyle (juce::Slider::LinearHorizontal);
     midiRateSlider_.setTextBoxStyle (juce::Slider::TextBoxRight, false, 36, 20);
+    midiRateSlider_.setScrollWheelEnabled (false);
     midiRateSlider_.onValueChange = [this]()
     {
         int hz = (int) midiRateSlider_.getValue();
@@ -236,6 +237,7 @@ MainComponent::MainComponent()
                                     juce::MathConstants<double>::pi);
         eulerSliders_[i].setSliderStyle (juce::Slider::LinearVertical);
         eulerSliders_[i].setTextBoxStyle (juce::Slider::NoTextBox, true, 0, 0);
+        eulerSliders_[i].setScrollWheelEnabled (false);
         eulerSliders_[i].setInterceptsMouseClicks (false, false);
         addAndMakeVisible (eulerSliders_[i]);
         eulerLabels_[i].setJustificationType (juce::Justification::centred);
@@ -264,6 +266,7 @@ MainComponent::MainComponent()
     yawSlider_.setDoubleClickReturnValue (true, 0.0);
     yawSlider_.setSliderStyle (juce::Slider::LinearHorizontal);
     yawSlider_.setTextBoxStyle (juce::Slider::TextBoxRight, false, 45, 20);
+    yawSlider_.setScrollWheelEnabled (false);
     yawSlider_.onValueChange = [this]()
     {
         quatViz_.setYawOffset ((float)yawSlider_.getValue());
@@ -279,6 +282,7 @@ MainComponent::MainComponent()
     fpsSlider_.setDoubleClickReturnValue (true, 30.0);
     fpsSlider_.setSliderStyle (juce::Slider::LinearHorizontal);
     fpsSlider_.setTextBoxStyle (juce::Slider::TextBoxRight, false, 35, 20);
+    fpsSlider_.setScrollWheelEnabled (false);
     fpsSlider_.onValueChange = [this]() { setDisplayFPS ((int)fpsSlider_.getValue()); };
     addAndMakeVisible (fpsSlider_);
 
@@ -303,6 +307,7 @@ void MainComponent::setupSlider (juce::Slider& s, juce::Label& l, const juce::St
     s.setRange (0.0, 1.0);
     s.setSliderStyle (juce::Slider::LinearHorizontal);
     s.setTextBoxStyle (juce::Slider::TextBoxRight, true, 55, 20);
+    s.setScrollWheelEnabled (false);
     s.setInterceptsMouseClicks (false, false);
     addAndMakeVisible (s);
 
