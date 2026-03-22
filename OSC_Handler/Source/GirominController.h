@@ -37,6 +37,8 @@ public:
         bool     use14bit   = true;
         double   lastSendMs = 0.0;
         int      lastVal14  = -1;
+        float    rangeMin   = 0.f;   // input sub-range [rangeMin, rangeMax] mapped to [0,1]
+        float    rangeMax   = 1.f;
     };
 
     // Todos os dados normalizados para [0,1] conforme midi_cc_map.h
@@ -122,11 +124,15 @@ public:
     void setCCOutMSB     (int i, int msb)       { ccOut_[i].msb      = juce::jlimit (0, 31, msb); }
     void setCCOutRateHz  (int i, int hz)        { ccOut_[i].rateHz   = juce::jlimit (1, 200, hz); }
     void setCCOut14bit   (int i, bool b)        { ccOut_[i].use14bit = b; ccOut_[i].lastVal14 = -1; }
-    bool     getCCOutEnabled (int i) const      { return ccOut_[i].enabled; }
-    CCSource getCCOutSource  (int i) const      { return ccOut_[i].source; }
-    int      getCCOutMSB     (int i) const      { return ccOut_[i].msb; }
-    int      getCCOutRateHz  (int i) const      { return ccOut_[i].rateHz; }
-    bool     getCCOut14bit   (int i) const      { return ccOut_[i].use14bit; }
+    void setCCOutRange   (int i, float lo, float hi) { ccOut_[i].rangeMin = lo; ccOut_[i].rangeMax = hi; ccOut_[i].lastVal14 = -1; }
+    bool     getCCOutEnabled  (int i) const     { return ccOut_[i].enabled; }
+    CCSource getCCOutSource   (int i) const     { return ccOut_[i].source; }
+    int      getCCOutMSB      (int i) const     { return ccOut_[i].msb; }
+    int      getCCOutRateHz   (int i) const     { return ccOut_[i].rateHz; }
+    bool     getCCOut14bit    (int i) const     { return ccOut_[i].use14bit; }
+    float    getCCOutRangeMin  (int i) const    { return ccOut_[i].rangeMin; }
+    float    getCCOutRangeMax  (int i) const    { return ccOut_[i].rangeMax; }
+    int      getCCOutLastVal14 (int i) const    { return ccOut_[i].lastVal14; }
     const CCOutConfig& getCCOutConfig (int i)   const { return ccOut_[i]; }
 
     // Called from timerCallback with the currently displayed Euler angles
@@ -154,6 +160,12 @@ public:
                 case CCSource::EULER2: srcVal = juce::jlimit (0.f, 1.f, (e2 + pi)       / (2.f * pi)); break;
                 case CCSource::EULER3: srcVal = juce::jlimit (0.f, 1.f, (e3 + pi * 0.5f) / pi);         break;
             }
+
+            // Apply input sub-range mapping: [rangeMin, rangeMax] → [0, 1]
+            // Works for both normal (min < max) and inverted (min > max) ranges.
+            float span = cfg.rangeMax - cfg.rangeMin;
+            if (std::abs (span) > 0.001f)
+                srcVal = juce::jlimit (0.f, 1.f, (srcVal - cfg.rangeMin) / span);
 
             double interval_ms = 1000.0 / cfg.rateHz;
             int    val14 = (int)(srcVal * 16383.f);
