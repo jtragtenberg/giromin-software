@@ -142,7 +142,7 @@ public:
         const float pi = juce::MathConstants<float>::pi;
         double now_ms = juce::Time::getMillisecondCounterHiRes();
 
-        for (int i = 0; i < 3; ++i)
+        for (int i = 0; i < 6; ++i)
         {
             auto& cfg = ccOut_[i];
             if (!cfg.enabled) continue;
@@ -406,8 +406,8 @@ private:
     float prev_b1_raw_     = 0.f;
     float prev_b2_raw_     = 0.f;
 
-    // 3 independent CC outputs
-    CCOutConfig ccOut_[3];
+    // Up to 6 independent CC outputs
+    CCOutConfig ccOut_[6];
 
     // MSBs pendentes para montagem de pares 14-bit: msb_pending_[giromin_idx][cc_number]
     // -1 = nenhum MSB pendente para este campo
