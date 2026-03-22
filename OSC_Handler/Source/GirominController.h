@@ -174,15 +174,16 @@ public:
             }
 
             int    val14       = (int)(srcVal * 16383.f);
+            int    sentVal     = cfg.use14bit ? val14 : (val14 >> 7);
             double interval_ms = 1000.0 / cfg.rateHz;
 
-            if ((now_ms - cfg.lastSendMs) >= interval_ms && cfg.changeTracker.changed (val14))
+            if ((now_ms - cfg.lastSendMs) >= interval_ms && cfg.changeTracker.changed (sentVal))
             {
                 if (cfg.use14bit)
                     midi_handler_.sendCC14 (note_channel_, cfg.msb, srcVal);
                 else
                     midi_handler_.outputMidiMessage (note_channel_, cfg.msb,
-                                                     juce::jlimit (0, 127, (int)(srcVal * 127.f)));
+                                                     juce::jlimit (0, 127, sentVal));
                 cfg.lastSendMs = now_ms;
                 cfg.lastVal14  = val14;
             }
