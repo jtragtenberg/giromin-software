@@ -1,4 +1,4 @@
-# Architecture & Glossary — imu-gesture-toolkit
+# Architecture & Glossary — Giromin
 
 ## Overview
 

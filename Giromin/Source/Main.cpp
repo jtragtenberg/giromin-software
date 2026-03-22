@@ -39,11 +39,11 @@ private:
 };
 
 //==============================================================================
-class OSC_HandlerApplication  : public juce::JUCEApplication
+class GirominApplication  : public juce::JUCEApplication
 {
 public:
     //==============================================================================
-    OSC_HandlerApplication() {}
+    GirominApplication() {}
 
     const juce::String getApplicationName() override       { return ProjectInfo::projectName; }
     const juce::String getApplicationVersion() override    { return ProjectInfo::versionString; }
@@ -131,4 +131,4 @@ private:
 
 //==============================================================================
 // This macro generates the main() routine that launches the app.
-START_JUCE_APPLICATION (OSC_HandlerApplication)
+START_JUCE_APPLICATION (GirominApplication)

@@ -33,5 +33,5 @@
 
 
 .DS_STORE
-OSC_Handler/JuceLibraryCode/*
-OSC_Handler/Builds/*
+Giromin/JuceLibraryCode/*
+Giromin/Builds/*
