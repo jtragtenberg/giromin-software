@@ -254,7 +254,7 @@ MainComponent::MainComponent()
         eulerCenterResetBtns_[i].setTooltip ("Set current angle as center (avoids the +-pi discontinuity)");
         eulerCenterResetBtns_[i].onClick = [this, i]()
         {
-            eulerCenter_[i] = (float) eulerSliders_[i].getValue();
+            eulerCenter_[i] += (float) eulerSliders_[i].getValue();
             saveSettings();
         };
         addAndMakeVisible (eulerCenterResetBtns_[i]);
@@ -460,7 +460,7 @@ void MainComponent::setupCCPanel (int i)
         int eulerIdx = sel - 6; // 0=E1, 1=E2
         if (eulerIdx >= 0 && eulerIdx < 2)
         {
-            eulerCenter_[eulerIdx] = (float) eulerSliders_[eulerIdx].getValue();
+            eulerCenter_[eulerIdx] += (float) eulerSliders_[eulerIdx].getValue();
             saveSettings();
         }
     };
