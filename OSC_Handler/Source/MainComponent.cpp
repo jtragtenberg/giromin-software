@@ -54,7 +54,7 @@ static std::array<float, 3> eulerFromQuat (float w, float x, float y, float z, i
 //==============================================================================
 MainComponent::MainComponent()
 {
-    setSize (700, 960);
+    setSize (700, 800);    // placeholder — corrected after loadSettings()
 
     // ── Persistência de configurações ────────────────────────────────────────
     juce::PropertiesFile::Options opts;
@@ -202,8 +202,8 @@ MainComponent::MainComponent()
     };
     addAndMakeVisible (noteB2Box);
 
-    // ── 3 painéis CC Output ───────────────────────────────────────────────────
-    for (int i = 0; i < 3; ++i)
+    // ── CC Output panels (initial count = numCCPanels_) ──────────────────────
+    for (int i = 0; i < numCCPanels_; ++i)
         setupCCPanel (i);
 
     // ── Callback de dados do sensor — apenas cacheia, timer faz o display ────
@@ -292,6 +292,7 @@ MainComponent::MainComponent()
 
     updateModeButtons();
     loadSettings();
+    setSize (700, computeContentHeight());
     setDisplayFPS (30);
 }
 
@@ -680,196 +681,352 @@ void MainComponent::timerCallback()
         eulerLabels_[i].setText (orderLabels[oi][i], juce::dontSendNotification);
 
     giromin_controller_.processCCOutputs (d, euler[0], euler[1], euler[2]);
+
+    // Update knob values and output labels
+    const float pi = juce::MathConstants<float>::pi;
+    for (int i = 0; i < numCCPanels_; ++i)
+    {
+        // Raw input value [0,1] for this CC channel's source
+        float srcVal = 0.5f;
+        switch (giromin_controller_.getCCOutSource (i))
+        {
+            case GirominController::CCSource::AX:     srcVal = d.ax; break;
+            case GirominController::CCSource::AY:     srcVal = d.ay; break;
+            case GirominController::CCSource::AZ:     srcVal = d.az; break;
+            case GirominController::CCSource::GX:     srcVal = d.gx; break;
+            case GirominController::CCSource::GY:     srcVal = d.gy; break;
+            case GirominController::CCSource::GZ:     srcVal = d.gz; break;
+            case GirominController::CCSource::EULER1: srcVal = juce::jlimit (0.f, 1.f, (euler[0] + pi)       / (2.f * pi)); break;
+            case GirominController::CCSource::EULER2: srcVal = juce::jlimit (0.f, 1.f, (euler[1] + pi)       / (2.f * pi)); break;
+            case GirominController::CCSource::EULER3: srcVal = juce::jlimit (0.f, 1.f, (euler[2] + pi * 0.5f) / pi);        break;
+        }
+
+        // Mapped output value [0,1] — handles inverted ranges
+        float rMin = giromin_controller_.getCCOutRangeMin (i);
+        float rMax = giromin_controller_.getCCOutRangeMax (i);
+        float span = rMax - rMin;
+        float outVal = (std::abs (span) > 0.001f)
+                        ? juce::jlimit (0.f, 1.f, (srcVal - rMin) / span)
+                        : 0.f;
+
+        ccRangeKnobs_[i].setInputValue  (srcVal);
+        ccRangeKnobs_[i].setOutputValue (outVal);
+
+        // Output value label
+        int v14 = giromin_controller_.getCCOutLastVal14 (i);
+        if (v14 < 0)
+            ccOutValueLabels_[i].setText ("---", juce::dontSendNotification);
+        else if (giromin_controller_.getCCOut14bit (i))
+            ccOutValueLabels_[i].setText (juce::String (v14), juce::dontSendNotification);
+        else
+            ccOutValueLabels_[i].setText (juce::String (v14 >> 7), juce::dontSendNotification);
+    }
+}
+
+void MainComponent::addCCPanel()
+{
+    if (numCCPanels_ >= kMaxCCPanels) return;
+    setupCCPanel (numCCPanels_);
+    ++numCCPanels_;
+    setSize (getWidth(), computeContentHeight());
+    resized();
+    repaint();
+    saveSettings();
+}
+
+int MainComponent::computeContentHeight() const
+{
+    const int P = 10, CG = 8, rowH = 34, gap = 4;
+    const int inputContentH = 30 + 10 + 3*(rowH+gap) + 10 + 3*(rowH+gap) + 10 + 36 + 10 + 26 + 6 + 138;
+    const int noteContentH  = 20 + 6 + 26;
+    const int btnCardH      = 26;
+    const int ccContentH    = 24 + 28 + 28 + 8 + 90 + 2 + 18;
+
+    int numSlots = (numCCPanels_ < kMaxCCPanels) ? numCCPanels_ + 1 : numCCPanels_;
+    int ccRows   = (numSlots > 4) ? 2 : 1;
+
+    int h = 16;   // reduced(8) border on each side
+    h += (inputContentH + P*2) + CG;
+    h += (noteContentH  + P*2) + CG;
+    h += (btnCardH      + P*2) + CG;
+    h += ccRows * (ccContentH + P*2) + (ccRows > 1 ? CG : 0);
+    h += 20;      // bottom padding
+    return h;
+}
+
+void MainComponent::mouseDown (const juce::MouseEvent& e)
+{
+    if (numCCPanels_ < kMaxCCPanels
+        && ccCards_[kMaxCCPanels].contains (e.getPosition()))
+        addCCPanel();
 }
 
 //==============================================================================
+static void drawCard (juce::Graphics& g, juce::Rectangle<int> r, const char* title)
+{
+    g.setColour (juce::Colour (0xff222222));
+    g.fillRoundedRectangle (r.toFloat(), 8.f);
+    g.setColour (juce::Colour (0xff3a3a3a));
+    g.drawRoundedRectangle (r.toFloat().reduced (0.5f), 8.f, 1.f);
+
+    if (title && title[0])
+    {
+        g.setColour (juce::Colours::white.withAlpha (0.35f));
+        g.setFont (juce::Font (juce::FontOptions().withHeight (11.f)));
+        g.drawText (title,
+                    r.removeFromTop (18).reduced (8, 0),
+                    juce::Justification::centredLeft);
+    }
+}
+
 void MainComponent::paint (juce::Graphics& g)
 {
     g.fillAll (getLookAndFeel().findColour (juce::ResizableWindow::backgroundColourId));
+
+    drawCard (g, inputCard_, "Input");
+    drawCard (g, noteCard_,  "MIDI Output");
+    drawCard (g, b1Card_, "");
+    drawCard (g, b2Card_, "");
+
+    for (int i = 0; i < numCCPanels_; ++i)
+    {
+        char buf[8];
+        snprintf (buf, sizeof (buf), "CC %d", i + 1);
+        drawCard (g, ccCards_[i], buf);
+    }
+
+    // "+" placeholder card
+    if (numCCPanels_ < kMaxCCPanels)
+    {
+        drawCard (g, ccCards_[kMaxCCPanels], "");
+        auto r = ccCards_[kMaxCCPanels].toFloat();
+        g.setColour (juce::Colours::white.withAlpha (0.18f));
+        g.setFont (juce::Font (juce::FontOptions().withHeight (28.f)));
+        g.drawText ("+", r, juce::Justification::centred);
+        g.setFont (juce::Font (juce::FontOptions().withHeight (11.f)));
+        g.drawText ("Add mapping",
+                    r.withTrimmedTop (r.getHeight() * 0.6f),
+                    juce::Justification::centred);
+    }
 }
 
 void MainComponent::resized()
 {
-    auto area = getLocalBounds().reduced (10);
+    const int P   = 10;   // card inner padding
+    const int CG  = 8;    // gap between cards
+    const int rowH = 34, gap = 4, labelW = 30;
 
-    // ── INPUT section ────────────────────────────────────────────────────────
+    auto area = getLocalBounds().reduced (8);
 
-    // Mode bar (full width, inside input)
-    auto topBar = area.removeFromTop (30);
-    oscModeBtn .setBounds (topBar.removeFromLeft (60));
-    topBar.removeFromLeft (6);
-    midiModeBtn.setBounds (topBar.removeFromLeft (60));
-    topBar.removeFromLeft (10);
-    midiInputSelector.setBounds (topBar.removeFromLeft (220));
-
-    area.removeFromTop (10);
-
-    const int labelW = 30;
-    const int rowH   = 34;
-    const int gap    = 4;
-
-    // Height for 6 sliders + buttons + euler section (10 + 26 combo + 6 + 120 sliders)
-    const int inputAreaH = 3 * (rowH + gap) + 10 + 3 * (rowH + gap) + 10 + 36 + 10 + 26 + 6 + 120;
-
-    auto inputArea = area.removeFromTop (inputAreaH);
-
-    // Left: quaternion visualizer + yaw slider below it
-    auto vizArea = inputArea.removeFromLeft (280);
-    inputArea.removeFromLeft (10);
-
-    const int yawRowH  = 28;
-    const int quatRowH = 20;
-    const int fpsRowH  = 28;
-
-    // Reserve space bottom-up: fps, 4 quat labels, yaw slider
+    // ── Input Card ────────────────────────────────────────────────────────────
+    const int inputContentH = 30 + 10
+                              + 3 * (rowH + gap) + 10
+                              + 3 * (rowH + gap) + 10
+                              + 36 + 10 + 26 + 6 + 138;
+    inputCard_ = area.removeFromTop (inputContentH + P * 2);
+    area.removeFromTop (CG);
     {
-        auto fpsRow = vizArea.removeFromBottom (fpsRowH);
-        fpsLabel_.setBounds (fpsRow.removeFromLeft (30));
-        fpsSlider_.setBounds (fpsRow);
-    }
+        auto inner = inputCard_.reduced (P);
 
-    quatLabel_.setBounds (vizArea.removeFromBottom (quatRowH));
+        auto topBar = inner.removeFromTop (30);
+        oscModeBtn .setBounds (topBar.removeFromLeft (60));
+        topBar.removeFromLeft (6);
+        midiModeBtn.setBounds (topBar.removeFromLeft (60));
+        topBar.removeFromLeft (10);
+        midiInputSelector.setBounds (topBar.removeFromLeft (220));
 
-    auto yawRow = vizArea.removeFromBottom (yawRowH);
-    yawLabel_.setBounds (yawRow.removeFromLeft (70));
-    yawSlider_.setBounds (yawRow);
+        inner.removeFromTop (10);
 
-    quatViz_.setBounds (vizArea);
+        auto inputArea = inner.removeFromTop (inputContentH - 30 - 10);
 
-    // Right: sliders + buttons
-    // ── Acelerômetro ─────────────────────────────────────────────────────────
-    for (int i = 0; i < 3; ++i)
-    {
-        auto row = inputArea.removeFromTop (rowH);
-        inputArea.removeFromTop (gap);
-        accelLabels[i].setBounds (row.removeFromLeft (labelW));
-        accelSliders[i].setBounds (row);
-    }
+        auto vizArea = inputArea.removeFromLeft (280);
+        inputArea.removeFromLeft (10);
 
-    inputArea.removeFromTop (10);
+        {
+            auto fpsRow = vizArea.removeFromBottom (28);
+            fpsLabel_.setBounds (fpsRow.removeFromLeft (30));
+            fpsSlider_.setBounds (fpsRow);
+        }
+        quatLabel_.setBounds (vizArea.removeFromBottom (20));
+        auto yawRow = vizArea.removeFromBottom (28);
+        yawLabel_.setBounds (yawRow.removeFromLeft (70));
+        yawSlider_.setBounds (yawRow);
+        quatViz_.setBounds (vizArea);
 
-    // ── Giroscópio ───────────────────────────────────────────────────────────
-    for (int i = 0; i < 3; ++i)
-    {
-        auto row = inputArea.removeFromTop (rowH);
-        inputArea.removeFromTop (gap);
-        gyroLabels[i].setBounds (row.removeFromLeft (labelW));
-        gyroSliders[i].setBounds (row);
-    }
-
-    inputArea.removeFromTop (10);
-
-    // ── Botões ───────────────────────────────────────────────────────────────
-    {
-        auto row = inputArea.removeFromTop (36);
-        btnToggles[0].setBounds (row.removeFromLeft (80));
-        row.removeFromLeft (10);
-        btnToggles[1].setBounds (row.removeFromLeft (80));
-    }
-
-    // ── Euler angles ─────────────────────────────────────────────────────────
-    inputArea.removeFromTop (10);
-    {
-        auto row = inputArea.removeFromTop (26);
-        int half = row.getWidth() / 2;
-        eulerOrderBox_ .setBounds (row.removeFromLeft (half - 2));
-        row.removeFromLeft (4);
-        eulerSourceBox_.setBounds (row);
-    }
-    inputArea.removeFromTop (6);
-
-    {
-        auto eulerArea = inputArea.removeFromTop (120);
-        int sliderW = eulerArea.getWidth() / 3;
         for (int i = 0; i < 3; ++i)
         {
-            auto col = (i < 2) ? eulerArea.removeFromLeft (sliderW)
-                                : eulerArea;
-            auto labelRow = col.removeFromBottom (18);
-            eulerSliders_[i].setBounds (col);
-            eulerLabels_[i].setBounds (labelRow);
+            auto row = inputArea.removeFromTop (rowH);
+            inputArea.removeFromTop (gap);
+            accelLabels[i].setBounds (row.removeFromLeft (labelW));
+            accelSliders[i].setBounds (row);
+        }
+        inputArea.removeFromTop (10);
+        for (int i = 0; i < 3; ++i)
+        {
+            auto row = inputArea.removeFromTop (rowH);
+            inputArea.removeFromTop (gap);
+            gyroLabels[i].setBounds (row.removeFromLeft (labelW));
+            gyroSliders[i].setBounds (row);
+        }
+        inputArea.removeFromTop (10);
+        {
+            auto row = inputArea.removeFromTop (36);
+            btnToggles[0].setBounds (row.removeFromLeft (80));
+            row.removeFromLeft (10);
+            btnToggles[1].setBounds (row.removeFromLeft (80));
+        }
+        inputArea.removeFromTop (10);
+        {
+            auto row = inputArea.removeFromTop (26);
+            int half = row.getWidth() / 2;
+            eulerOrderBox_ .setBounds (row.removeFromLeft (half - 2));
+            row.removeFromLeft (4);
+            eulerSourceBox_.setBounds (row);
+        }
+        inputArea.removeFromTop (6);
+        {
+            auto eulerArea = inputArea.removeFromTop (138);
+            int sliderW = eulerArea.getWidth() / 3;
+            for (int i = 0; i < 3; ++i)
+            {
+                auto col = (i < 2) ? eulerArea.removeFromLeft (sliderW) : eulerArea;
+                if (i < 2)
+                {
+                    auto btnRow = col.removeFromBottom (20);
+                    col.removeFromBottom (2);
+                    eulerCenterResetBtns_[i].setBounds (btnRow);
+                }
+                auto labelRow = col.removeFromBottom (18);
+                eulerSliders_[i].setBounds (col);
+                eulerLabels_[i].setBounds (labelRow);
+            }
         }
     }
 
-    area.removeFromTop (14);
-
-    // ── Painel Note Output ───────────────────────────────────────────────────
-    noteOutputLabel.setBounds (area.removeFromTop (20));
-    area.removeFromTop (6);
-
-    const int colLabelW = 46;
-    const int colW      = 180;
-    const int smallW    = 70;
-
-    // Linha 1: Device
+    // ── Note Output Card ──────────────────────────────────────────────────────
+    const int noteContentH = 20 + 6 + 26;
+    noteCard_ = area.removeFromTop (noteContentH + P * 2);
+    area.removeFromTop (CG);
     {
-        auto row = area.removeFromTop (26);
-        area.removeFromTop (gap);
-        midiOutLabel.setBounds (row.removeFromLeft (colLabelW));
-        row.removeFromLeft (4);
-        midiOutputSelector.setBounds (row.removeFromLeft (colW));
-    }
+        auto inner = noteCard_.reduced (P);
+        const int colLabelW = 30, smallW = 62;
 
-    // Linha 2: Channel
-    {
-        auto row = area.removeFromTop (26);
-        area.removeFromTop (gap);
-        noteChLabel.setBounds (row.removeFromLeft (colLabelW));
-        row.removeFromLeft (4);
-        noteChannelBox.setBounds (row.removeFromLeft (smallW));
-    }
+        noteOutputLabel.setBounds (inner.removeFromTop (20));
+        inner.removeFromTop (6);
 
-    // Linha 3: B1 note / B2 note
-    {
-        auto row = area.removeFromTop (26);
-        noteB1Label.setBounds (row.removeFromLeft (colLabelW));
-        row.removeFromLeft (4);
-        noteB1Box.setBounds (row.removeFromLeft (smallW));
-        row.removeFromLeft (16);
-        noteB2Label.setBounds (row.removeFromLeft (colLabelW));
-        row.removeFromLeft (4);
-        noteB2Box.setBounds (row.removeFromLeft (smallW));
-    }
-
-    area.removeFromTop (14);
-
-    // ── 3 painéis CC Output lado a lado ──────────────────────────────────────
-    // Each panel: label+enable / source / cc number / rate+14bit  (4 rows × 26 + gaps)
-    {
-        const int panelGap = 8;
-        int totalW  = area.getWidth();
-        int panelW  = (totalW - 2 * panelGap) / 3;
-
-        for (int i = 0; i < 3; ++i)
         {
-            auto col = (i < 2) ? area.removeFromLeft (panelW)
-                                : area;
-            if (i < 2) area.removeFromLeft (panelGap);
+            auto row = inner.removeFromTop (26);
+            midiOutLabel.setBounds (row.removeFromLeft (colLabelW));
+            row.removeFromLeft (4);
+            midiOutputSelector.setBounds (row.removeFromLeft (160));
+            row.removeFromLeft (8);
+            noteChLabel.setBounds (row.removeFromLeft (colLabelW));
+            row.removeFromLeft (4);
+            noteChannelBox.setBounds (row.removeFromLeft (smallW));
+            row.removeFromLeft (8);
+            midiRateLabel_.setBounds (row.removeFromLeft (22));
+            row.removeFromLeft (2);
+            midiRateSlider_.setBounds (row);
+        }
+    }
 
-            // Header: label + enable button
-            {
-                auto row = col.removeFromTop (20);
-                col.removeFromTop (4);
-                ccOutLabels_[i].setBounds (row.removeFromLeft (34));
-                row.removeFromLeft (4);
-                ccOutEnableBtns_[i].setBounds (row.removeFromLeft (46));
-            }
+    // ── B1 / B2 mini-cards ────────────────────────────────────────────────────
+    {
+        const int btnCardH = 26;
+        auto btnRow = area.removeFromTop (btnCardH + P * 2);
+        area.removeFromTop (CG);
+        int half = (btnRow.getWidth() - CG) / 2;
 
-            // Source
-            ccSourceBoxes_[i].setBounds (col.removeFromTop (24));
+        b1Card_ = btnRow.removeFromLeft (half);
+        btnRow.removeFromLeft (CG);
+        b2Card_ = btnRow;
+
+        {
+            auto inner = b1Card_.reduced (P);
+            noteB1Label.setBounds (inner.removeFromLeft (30));
+            inner.removeFromLeft (4);
+            noteB1Box.setBounds (inner);
+        }
+        {
+            auto inner = b2Card_.reduced (P);
+            noteB2Label.setBounds (inner.removeFromLeft (30));
+            inner.removeFromLeft (4);
+            noteB2Box.setBounds (inner);
+        }
+    }
+
+    // ── CC Cards (dynamic) + Placeholder Card ────────────────────────────────
+    const int ccContentH = 24 + 28 + 28 + 8 + 90 + 2 + 18;
+
+    // Helper: lay out widgets for one CC panel inside its card rect
+    auto layoutCCPanel = [&](int i, juce::Rectangle<int> cardRect)
+    {
+        ccCards_[i] = cardRect;
+        auto col = cardRect.reduced (P);
+
+        {
+            auto row = col.removeFromTop (20);
+            col.removeFromTop (4);
+            ccOutLabels_[i].setBounds (row.removeFromLeft (34));
+            row.removeFromLeft (4);
+            ccOutEnableBtns_[i].setBounds (row.removeFromLeft (46));
+        }
+
+        ccSourceBoxes_[i].setBounds (col.removeFromTop (24));
+        col.removeFromTop (gap);
+
+        {
+            auto row = col.removeFromTop (24);
             col.removeFromTop (gap);
+            cc14bitBtns_[i].setBounds (row.removeFromRight (34));
+            row.removeFromRight (4);
+            ccNumberBoxes_[i].setBounds (row);
+        }
 
-            // CC number
-            ccNumberBoxes_[i].setBounds (col.removeFromTop (24));
-            col.removeFromTop (gap);
+        col.removeFromTop (8);
+        {
+            int knobSize = juce::jmin (col.getWidth(), 90);
+            int knobX = col.getX() + (col.getWidth() - knobSize) / 2;
+            ccRangeKnobs_[i].setBounds (knobX, col.getY(), knobSize, knobSize);
+            col.removeFromTop (knobSize + 2);
+            ccOutValueLabels_[i].setBounds (col.removeFromTop (18));
+        }
+    };
 
-            // Rate + 14bit
-            {
-                auto row = col.removeFromTop (24);
-                cc14bitBtns_[i].setBounds (row.removeFromRight (34));
-                row.removeFromRight (4);
-                ccRateSliders_[i].setBounds (row);
-            }
+    // Helper: lay out one row of up to 4 slots starting at startSlot
+    auto layoutCCRow = [&](juce::Rectangle<int> rowArea, int startSlot)
+    {
+        int numSlots  = (numCCPanels_ < kMaxCCPanels) ? numCCPanels_ + 1 : numCCPanels_;
+        int slotsLeft = juce::jmin (4, numSlots - startSlot);
+        int cw        = (rowArea.getWidth() - (slotsLeft - 1) * CG) / slotsLeft;
+
+        for (int col = 0; col < slotsLeft; ++col)
+        {
+            int slot = startSlot + col;
+            juce::Rectangle<int> cardRect = (col < slotsLeft - 1)
+                ? rowArea.removeFromLeft (cw)
+                : rowArea;
+            if (col < slotsLeft - 1) rowArea.removeFromLeft (CG);
+
+            if (slot < numCCPanels_)
+                layoutCCPanel (slot, cardRect);
+            else
+                ccCards_[kMaxCCPanels] = cardRect;   // "+" placeholder
+        }
+    };
+
+    {
+        int numSlots = (numCCPanels_ < kMaxCCPanels) ? numCCPanels_ + 1 : numCCPanels_;
+        bool twoRows = (numSlots > 4);
+
+        auto ccRow1 = area.removeFromTop (ccContentH + P * 2);
+        layoutCCRow (ccRow1, 0);
+
+        if (twoRows)
+        {
+            area.removeFromTop (CG);
+            auto ccRow2 = area.removeFromTop (ccContentH + P * 2);
+            layoutCCRow (ccRow2, 4);
         }
     }
 }
