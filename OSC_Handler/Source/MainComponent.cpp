@@ -129,7 +129,7 @@ MainComponent::MainComponent()
     noteOutputLabel.setFont (juce::Font (juce::FontOptions().withHeight (14.f).withStyle ("Bold")));
     addAndMakeVisible (noteOutputLabel);
 
-    for (auto* l : { &midiOutLabel, &noteChLabel, &noteB1Label, &noteB2Label })
+    for (auto* l : { &midiOutLabel, &noteChLabel, &midiRateLabel_, &noteB1Label, &noteB2Label })
     {
         l->setJustificationType (juce::Justification::centredRight);
         addAndMakeVisible (l);
@@ -169,6 +169,21 @@ MainComponent::MainComponent()
         saveSettings();
     };
     addAndMakeVisible (noteChannelBox);
+
+    // Global MIDI output rate (applies to all CC channels)
+    midiRateSlider_.setRange (1, 200, 1);
+    midiRateSlider_.setValue (10, juce::dontSendNotification);
+    midiRateSlider_.setDoubleClickReturnValue (true, 10.0);
+    midiRateSlider_.setSliderStyle (juce::Slider::LinearHorizontal);
+    midiRateSlider_.setTextBoxStyle (juce::Slider::TextBoxRight, false, 36, 20);
+    midiRateSlider_.onValueChange = [this]()
+    {
+        int hz = (int) midiRateSlider_.getValue();
+        for (int i = 0; i < 3; ++i)
+            giromin_controller_.setCCOutRateHz (i, hz);
+        saveSettings();
+    };
+    addAndMakeVisible (midiRateSlider_);
 
     // Note selectors B1 / B2
     populateNoteBox (noteB1Box, giromin_controller_.getNoteForButton (0));
@@ -367,18 +382,6 @@ void MainComponent::setupCCPanel (int i)
         saveSettings();
     };
     addAndMakeVisible (ccNumberBoxes_[i]);
-
-    ccRateSliders_[i].setRange (1, 200, 1);
-    ccRateSliders_[i].setValue (giromin_controller_.getCCOutRateHz (i), juce::dontSendNotification);
-    ccRateSliders_[i].setDoubleClickReturnValue (true, 10.0);
-    ccRateSliders_[i].setSliderStyle (juce::Slider::LinearHorizontal);
-    ccRateSliders_[i].setTextBoxStyle (juce::Slider::TextBoxRight, false, 36, 20);
-    ccRateSliders_[i].onValueChange = [this, i]()
-    {
-        giromin_controller_.setCCOutRateHz (i, (int)ccRateSliders_[i].getValue());
-        saveSettings();
-    };
-    addAndMakeVisible (ccRateSliders_[i]);
 
     cc14bitBtns_[i].setClickingTogglesState (true);
     cc14bitBtns_[i].setToggleState (giromin_controller_.getCCOut14bit (i), juce::dontSendNotification);
