@@ -304,7 +304,7 @@ MainComponent::~MainComponent() {}
 
 void MainComponent::setupSlider (juce::Slider& s, juce::Label& l, const juce::String& name)
 {
-    s.setRange (0.0, 1.0);
+    s.setRange (-1.0, 1.0);
     s.setSliderStyle (juce::Slider::LinearHorizontal);
     s.setTextBoxStyle (juce::Slider::TextBoxRight, true, 55, 20);
     s.setScrollWheelEnabled (false);
@@ -377,6 +377,7 @@ void MainComponent::setupCCPanel (int i)
     updateCCEnableButton (i);
 
     // Source: AX/AY/AZ/GX/GY/GZ/E1/E2/E3
+    ccSourceBoxes_[i].clear (juce::dontSendNotification);
     ccSourceBoxes_[i].addItem ("Accel X",   1);
     ccSourceBoxes_[i].addItem ("Accel Y",   2);
     ccSourceBoxes_[i].addItem ("Accel Z",   3);
@@ -410,6 +411,7 @@ void MainComponent::setupCCPanel (int i)
     updateKnobLabel();
     addAndMakeVisible (ccSourceBoxes_[i]);
 
+    ccNumberBoxes_[i].clear (juce::dontSendNotification);
     for (int msb = 0; msb < 32; ++msb)
         ccNumberBoxes_[i].addItem (ccNames[msb], msb + 1);
     ccNumberBoxes_[i].setSelectedId (giromin_controller_.getCCOutMSB (i) + 1);
@@ -601,8 +603,8 @@ void MainComponent::loadSettings()
         giromin_controller_.setCCOutMSB (i, msb);
         ccNumberBoxes_[i].setSelectedId (msb + 1, juce::dontSendNotification);
 
-        float rMin = (float) p->getDoubleValue (k + "RangeMin", 0.0);
-        float rMax = (float) p->getDoubleValue (k + "RangeMax", 1.0);
+        float rMin = (float) p->getDoubleValue (k + "RangeMin", -1.0);
+        float rMax = (float) p->getDoubleValue (k + "RangeMax",  1.0);
         giromin_controller_.setCCOutRange (i, rMin, rMax);
         ccRangeKnobs_[i].setNormalizedRange (rMin, rMax);
     }
@@ -720,8 +722,8 @@ void MainComponent::timerCallback()
     const float pi = juce::MathConstants<float>::pi;
     for (int i = 0; i < numCCPanels_; ++i)
     {
-        // Raw input value [0,1] for this CC channel's source
-        float srcVal = 0.5f;
+        // Raw input value [-1,1] for this CC channel's source
+        float srcVal = 0.f;
         switch (giromin_controller_.getCCOutSource (i))
         {
             case GirominController::CCSource::AX:     srcVal = d.ax; break;
@@ -730,9 +732,9 @@ void MainComponent::timerCallback()
             case GirominController::CCSource::GX:     srcVal = d.gx; break;
             case GirominController::CCSource::GY:     srcVal = d.gy; break;
             case GirominController::CCSource::GZ:     srcVal = d.gz; break;
-            case GirominController::CCSource::EULER1: srcVal = juce::jlimit (0.f, 1.f, (euler[0] + pi)       / (2.f * pi)); break;
-            case GirominController::CCSource::EULER2: srcVal = juce::jlimit (0.f, 1.f, (euler[1] + pi)       / (2.f * pi)); break;
-            case GirominController::CCSource::EULER3: srcVal = juce::jlimit (0.f, 1.f, (euler[2] + pi * 0.5f) / pi);        break;
+            case GirominController::CCSource::EULER1: srcVal = juce::jlimit (-1.f, 1.f, euler[0] / pi);          break;
+            case GirominController::CCSource::EULER2: srcVal = juce::jlimit (-1.f, 1.f, euler[1] / pi);          break;
+            case GirominController::CCSource::EULER3: srcVal = juce::jlimit (-1.f, 1.f, euler[2] / (pi * 0.5f)); break;
         }
 
         // Mapped output value [0,1] — handles inverted ranges
@@ -802,7 +804,7 @@ void MainComponent::removeCCPanel (int idx)
     // Clear the last (now duplicate) slot from controller and hide its widgets
     int last = numCCPanels_ - 1;
     giromin_controller_.setCCOutEnabled (last, false);
-    giromin_controller_.setCCOutRange   (last, 0.f, 1.f);
+    giromin_controller_.setCCOutRange   (last, -1.f, 1.f);
 
     ccOutLabels_[last]     .setVisible (false);
     ccOutEnableBtns_[last] .setVisible (false);
