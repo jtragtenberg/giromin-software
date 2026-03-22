@@ -54,7 +54,7 @@ static std::array<float, 3> eulerFromQuat (float w, float x, float y, float z, i
 //==============================================================================
 MainComponent::MainComponent()
 {
-    setSize (700, 960);
+    setSize (700, 800);    // placeholder — corrected after loadSettings()
 
     // ── Persistência de configurações ────────────────────────────────────────
     juce::PropertiesFile::Options opts;
@@ -129,7 +129,7 @@ MainComponent::MainComponent()
     noteOutputLabel.setFont (juce::Font (juce::FontOptions().withHeight (14.f).withStyle ("Bold")));
     addAndMakeVisible (noteOutputLabel);
 
-    for (auto* l : { &midiOutLabel, &noteChLabel, &noteB1Label, &noteB2Label })
+    for (auto* l : { &midiOutLabel, &noteChLabel, &midiRateLabel_, &noteB1Label, &noteB2Label })
     {
         l->setJustificationType (juce::Justification::centredRight);
         addAndMakeVisible (l);
@@ -170,6 +170,22 @@ MainComponent::MainComponent()
     };
     addAndMakeVisible (noteChannelBox);
 
+    // Global MIDI output rate (applies to all CC channels)
+    midiRateSlider_.setRange (1, 200, 1);
+    midiRateSlider_.setValue (10, juce::dontSendNotification);
+    midiRateSlider_.setDoubleClickReturnValue (true, 10.0);
+    midiRateSlider_.setSliderStyle (juce::Slider::LinearHorizontal);
+    midiRateSlider_.setTextBoxStyle (juce::Slider::TextBoxRight, false, 36, 20);
+    midiRateSlider_.setScrollWheelEnabled (false);
+    midiRateSlider_.onValueChange = [this]()
+    {
+        int hz = (int) midiRateSlider_.getValue();
+        for (int i = 0; i < 3; ++i)
+            giromin_controller_.setCCOutRateHz (i, hz);
+        saveSettings();
+    };
+    addAndMakeVisible (midiRateSlider_);
+
     // Note selectors B1 / B2
     populateNoteBox (noteB1Box, giromin_controller_.getNoteForButton (0));
     noteB1Box.onChange = [this]()
@@ -187,117 +203,9 @@ MainComponent::MainComponent()
     };
     addAndMakeVisible (noteB2Box);
 
-    // ── Painel CC Output ─────────────────────────────────────────────────────
-    ccOutLabel.setFont (juce::Font (juce::FontOptions().withHeight (14.f).withStyle ("Bold")));
-    addAndMakeVisible (ccOutLabel);
-
-    for (auto* l : { &ccSourceLabel, &ccNumberLabel })
-    {
-        l->setJustificationType (juce::Justification::centredRight);
-        addAndMakeVisible (l);
-    }
-
-    // Enable toggle button
-    ccOutEnableBtn.setClickingTogglesState (true);
-    ccOutEnableBtn.onClick = [this]()
-    {
-        giromin_controller_.setCCOutEnabled (ccOutEnableBtn.getToggleState());
-        updateCCEnableButton();
-        saveSettings();
-    };
-    addAndMakeVisible (ccOutEnableBtn);
-    updateCCEnableButton();
-
-    // Source selector
-    {
-        struct { const char* name; GirominController::CCSource src; } sources[] = {
-            { "Accel X",  GirominController::CCSource::AX },
-            { "Accel Y",  GirominController::CCSource::AY },
-            { "Accel Z",  GirominController::CCSource::AZ },
-            { "Gyro X",   GirominController::CCSource::GX },
-            { "Gyro Y",   GirominController::CCSource::GY },
-            { "Gyro Z",   GirominController::CCSource::GZ },
-        };
-        int id = 1;
-        for (auto& s : sources)
-            ccSourceBox.addItem (s.name, id++);
-
-        // Default: match cc_out_source_ (GX = index 4)
-        ccSourceBox.setSelectedId (4);
-        ccSourceBox.onChange = [this]()
-        {
-            GirominController::CCSource srcs[] = {
-                GirominController::CCSource::AX, GirominController::CCSource::AY,
-                GirominController::CCSource::AZ, GirominController::CCSource::GX,
-                GirominController::CCSource::GY, GirominController::CCSource::GZ
-            };
-            int sel = ccSourceBox.getSelectedId() - 1;
-            if (sel >= 0 && sel < 6)
-                giromin_controller_.setCCOutSource (srcs[sel]);
-            saveSettings();
-        };
-        addAndMakeVisible (ccSourceBox);
-    }
-
-    // CC number selector — all 14-bit CCs 0-31 (item ID = msb + 1)
-    {
-        static const char* ccNames[32] = {
-            "0  - Bank Select",         "1  - Mod Wheel",
-            "2  - Breath Controller",   "3  - Undefined",
-            "4  - Foot Pedal",          "5  - Portamento Time",
-            "6  - Data Entry",          "7  - Volume",
-            "8  - Balance",             "9  - Undefined",
-            "10 - Pan",                 "11 - Expression",
-            "12 - Effect Controller 1", "13 - Effect Controller 2",
-            "14 - Undefined",           "15 - Undefined",
-            "16 - General Purpose 1",   "17 - General Purpose 2",
-            "18 - General Purpose 3",   "19 - General Purpose 4",
-            "20 - Undefined",           "21 - Undefined",
-            "22 - Undefined",           "23 - Undefined",
-            "24 - Undefined",           "25 - Undefined",
-            "26 - Undefined",           "27 - Undefined",
-            "28 - Undefined",           "29 - Undefined",
-            "30 - Undefined",           "31 - Undefined",
-        };
-        for (int msb = 0; msb < 32; ++msb)
-            ccNumberBox.addItem (ccNames[msb], msb + 1);  // ID = msb + 1
-
-        ccNumberBox.setSelectedId (giromin_controller_.getCCOutMSB() + 1);
-        ccNumberBox.onChange = [this]()
-        {
-            giromin_controller_.setCCOutMSB (ccNumberBox.getSelectedId() - 1);
-            saveSettings();
-        };
-        addAndMakeVisible (ccNumberBox);
-    }
-
-    // Rate slider
-    ccRateLabel.setJustificationType (juce::Justification::centredRight);
-    addAndMakeVisible (ccRateLabel);
-
-    ccRateSlider.setRange (1, 200, 1);
-    ccRateSlider.setValue (giromin_controller_.getCCOutRateHz(), juce::dontSendNotification);
-    ccRateSlider.setDoubleClickReturnValue (true, 10.0);
-    ccRateSlider.setSliderStyle (juce::Slider::LinearHorizontal);
-    ccRateSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 45, 20);
-    ccRateSlider.onValueChange = [this]()
-    {
-        giromin_controller_.setCCOutRateHz ((int)ccRateSlider.getValue());
-        saveSettings();
-    };
-    addAndMakeVisible (ccRateSlider);
-
-    // 14-bit / 7-bit toggle
-    cc14bitBtn.setClickingTogglesState (true);
-    cc14bitBtn.setToggleState (giromin_controller_.getCCOut14bit(), juce::dontSendNotification);
-    cc14bitBtn.onClick = [this]()
-    {
-        giromin_controller_.setCCOut14bit (cc14bitBtn.getToggleState());
-        updateCC14bitButton();
-        saveSettings();
-    };
-    addAndMakeVisible (cc14bitBtn);
-    updateCC14bitButton();
+    // ── CC Output panels (initial count = numCCPanels_) ──────────────────────
+    for (int i = 0; i < numCCPanels_; ++i)
+        setupCCPanel (i);
 
     // ── Callback de dados do sensor — apenas cacheia, timer faz o display ────
     giromin_controller_.update_UI = [this](const GirominController::SensorDisplayData& d)
@@ -329,6 +237,7 @@ MainComponent::MainComponent()
                                     juce::MathConstants<double>::pi);
         eulerSliders_[i].setSliderStyle (juce::Slider::LinearVertical);
         eulerSliders_[i].setTextBoxStyle (juce::Slider::NoTextBox, true, 0, 0);
+        eulerSliders_[i].setScrollWheelEnabled (false);
         eulerSliders_[i].setInterceptsMouseClicks (false, false);
         addAndMakeVisible (eulerSliders_[i]);
         eulerLabels_[i].setJustificationType (juce::Justification::centred);
@@ -338,12 +247,26 @@ MainComponent::MainComponent()
     eulerSliders_[2].setRange (-juce::MathConstants<double>::pi / 2.0,
                                 juce::MathConstants<double>::pi / 2.0);
 
+    // ── Euler center-reset buttons (E1 and E2 only) ───────────────────────────
+    for (int i = 0; i < 2; ++i)
+    {
+        eulerCenterResetBtns_[i].setButtonText ("ctr");
+        eulerCenterResetBtns_[i].setTooltip ("Set current angle as center (avoids the +-pi discontinuity)");
+        eulerCenterResetBtns_[i].onClick = [this, i]()
+        {
+            eulerCenter_[i] += (float) eulerSliders_[i].getValue();
+            saveSettings();
+        };
+        addAndMakeVisible (eulerCenterResetBtns_[i]);
+    }
+
     // ── Yaw offset slider ────────────────────────────────────────────────────
     yawSlider_.setRange (-180.0, 180.0, 1.0);
     yawSlider_.setValue (0.0, juce::dontSendNotification);
     yawSlider_.setDoubleClickReturnValue (true, 0.0);
     yawSlider_.setSliderStyle (juce::Slider::LinearHorizontal);
     yawSlider_.setTextBoxStyle (juce::Slider::TextBoxRight, false, 45, 20);
+    yawSlider_.setScrollWheelEnabled (false);
     yawSlider_.onValueChange = [this]()
     {
         quatViz_.setYawOffset ((float)yawSlider_.getValue());
@@ -359,6 +282,7 @@ MainComponent::MainComponent()
     fpsSlider_.setDoubleClickReturnValue (true, 30.0);
     fpsSlider_.setSliderStyle (juce::Slider::LinearHorizontal);
     fpsSlider_.setTextBoxStyle (juce::Slider::TextBoxRight, false, 35, 20);
+    fpsSlider_.setScrollWheelEnabled (false);
     fpsSlider_.onValueChange = [this]() { setDisplayFPS ((int)fpsSlider_.getValue()); };
     addAndMakeVisible (fpsSlider_);
 
@@ -372,6 +296,7 @@ MainComponent::MainComponent()
 
     updateModeButtons();
     loadSettings();
+    setSize (700, computeContentHeight());
     setDisplayFPS (30);
 }
 
@@ -379,9 +304,10 @@ MainComponent::~MainComponent() {}
 
 void MainComponent::setupSlider (juce::Slider& s, juce::Label& l, const juce::String& name)
 {
-    s.setRange (0.0, 1.0);
+    s.setRange (-1.0, 1.0);
     s.setSliderStyle (juce::Slider::LinearHorizontal);
     s.setTextBoxStyle (juce::Slider::TextBoxRight, true, 55, 20);
+    s.setScrollWheelEnabled (false);
     s.setInterceptsMouseClicks (false, false);
     addAndMakeVisible (s);
 
@@ -400,20 +326,148 @@ void MainComponent::populateNoteBox (juce::ComboBox& box, int defaultNote)
     box.setSelectedId (defaultNote + 1);
 }
 
-void MainComponent::updateCC14bitButton()
+void MainComponent::updateCC14bitButton (int i)
 {
-    bool is14 = cc14bitBtn.getToggleState();
-    cc14bitBtn.setButtonText (is14 ? "14-bit" : "7-bit");
-    cc14bitBtn.setColour (juce::TextButton::buttonColourId,
-                          is14 ? juce::Colours::steelblue : juce::Colours::slategrey);
+    bool is14 = cc14bitBtns_[i].getToggleState();
+    cc14bitBtns_[i].setButtonText (is14 ? "14b" : "7b");
+    cc14bitBtns_[i].setColour (juce::TextButton::buttonColourId,
+                                is14 ? juce::Colours::steelblue : juce::Colours::slategrey);
 }
 
-void MainComponent::updateCCEnableButton()
+void MainComponent::updateCCCenterButton (int i)
 {
-    bool on = ccOutEnableBtn.getToggleState();
-    ccOutEnableBtn.setButtonText (on ? "Enabled" : "Enable");
-    ccOutEnableBtn.setColour (juce::TextButton::buttonColourId,
-                              on ? juce::Colours::limegreen : juce::Colours::darkgrey);
+    int sel = ccSourceBoxes_[i].getSelectedId() - 1; // 0-based
+    bool showCtr = (sel == 6 || sel == 7); // Euler 1 or Euler 2
+    ccCenterBtns_[i].setVisible (showCtr);
+}
+
+void MainComponent::updateCCEnableButton (int i)
+{
+    bool on = ccOutEnableBtns_[i].getToggleState();
+    ccOutEnableBtns_[i].setButtonText (on ? "ON" : "OFF");
+    ccOutEnableBtns_[i].setColour (juce::TextButton::buttonColourId,
+                                    on ? juce::Colours::limegreen : juce::Colours::darkgrey);
+}
+
+void MainComponent::setupCCPanel (int i)
+{
+    static const char* ccNames[32] = {
+        "0  Bank Sel",   "1  Mod Wheel",  "2  Breath",     "3  Undef",
+        "4  Foot",       "5  Portamento", "6  Data Entry", "7  Volume",
+        "8  Balance",    "9  Undef",      "10 Pan",        "11 Expr",
+        "12 FX Ctrl 1",  "13 FX Ctrl 2",  "14 Undef",      "15 Undef",
+        "16 Gen Pur 1",  "17 Gen Pur 2",  "18 Gen Pur 3",  "19 Gen Pur 4",
+        "20 Undef",      "21 Undef",      "22 Undef",      "23 Undef",
+        "24 Undef",      "25 Undef",      "26 Undef",      "27 Undef",
+        "28 Undef",      "29 Undef",      "30 Undef",      "31 Undef",
+    };
+
+    ccOutLabels_[i].setText ("CC " + juce::String (i + 1), juce::dontSendNotification);
+    ccOutLabels_[i].setFont (juce::Font (juce::FontOptions().withHeight (13.f).withStyle ("Bold")));
+    addAndMakeVisible (ccOutLabels_[i]);
+
+    ccOutEnableBtns_[i].setClickingTogglesState (true);
+    ccOutEnableBtns_[i].onClick = [this, i]()
+    {
+        giromin_controller_.setCCOutEnabled (i, ccOutEnableBtns_[i].getToggleState());
+        updateCCEnableButton (i);
+        saveSettings();
+    };
+    addAndMakeVisible (ccOutEnableBtns_[i]);
+    updateCCEnableButton (i);
+
+    // Source: AX/AY/AZ/GX/GY/GZ/E1/E2/E3
+    ccSourceBoxes_[i].clear (juce::dontSendNotification);
+    ccSourceBoxes_[i].addItem ("Accel X",   1);
+    ccSourceBoxes_[i].addItem ("Accel Y",   2);
+    ccSourceBoxes_[i].addItem ("Accel Z",   3);
+    ccSourceBoxes_[i].addItem ("Gyro X",    4);
+    ccSourceBoxes_[i].addItem ("Gyro Y",    5);
+    ccSourceBoxes_[i].addItem ("Gyro Z",    6);
+    ccSourceBoxes_[i].addItem ("Euler 1",   7);
+    ccSourceBoxes_[i].addItem ("Euler 2",   8);
+    ccSourceBoxes_[i].addItem ("Euler 3",   9);
+    ccSourceBoxes_[i].setSelectedId ((int)giromin_controller_.getCCOutSource (i) + 1);
+    static const char* srcShortNames[] = { "AX","AY","AZ","GX","GY","GZ","E1","E2","E3" };
+    auto updateKnobLabel = [this, i]()
+    {
+        int sel = ccSourceBoxes_[i].getSelectedId() - 1;
+        if (sel >= 0 && sel < 9)
+            ccRangeKnobs_[i].setCentreLabel (srcShortNames[sel]);
+    };
+
+    ccSourceBoxes_[i].onChange = [this, i, updateKnobLabel]()
+    {
+        using S = GirominController::CCSource;
+        static const S srcs[] = { S::AX, S::AY, S::AZ, S::GX, S::GY, S::GZ,
+                                   S::EULER1, S::EULER2, S::EULER3 };
+        int sel = ccSourceBoxes_[i].getSelectedId() - 1;
+        if (sel >= 0 && sel < 9)
+            giromin_controller_.setCCOutSource (i, srcs[sel]);
+        updateKnobLabel();
+        updateCCCenterButton (i);
+        saveSettings();
+    };
+    updateKnobLabel();
+    addAndMakeVisible (ccSourceBoxes_[i]);
+
+    ccNumberBoxes_[i].clear (juce::dontSendNotification);
+    for (int msb = 0; msb < 32; ++msb)
+        ccNumberBoxes_[i].addItem (ccNames[msb], msb + 1);
+    ccNumberBoxes_[i].setSelectedId (giromin_controller_.getCCOutMSB (i) + 1);
+    ccNumberBoxes_[i].onChange = [this, i]()
+    {
+        giromin_controller_.setCCOutMSB (i, ccNumberBoxes_[i].getSelectedId() - 1);
+        saveSettings();
+    };
+    addAndMakeVisible (ccNumberBoxes_[i]);
+
+    cc14bitBtns_[i].setClickingTogglesState (true);
+    cc14bitBtns_[i].setToggleState (giromin_controller_.getCCOut14bit (i), juce::dontSendNotification);
+    cc14bitBtns_[i].onClick = [this, i]()
+    {
+        giromin_controller_.setCCOut14bit (i, cc14bitBtns_[i].getToggleState());
+        updateCC14bitButton (i);
+        saveSettings();
+    };
+    addAndMakeVisible (cc14bitBtns_[i]);
+    updateCC14bitButton (i);
+
+    // ── Range knob ────────────────────────────────────────────────────────
+    ccRangeKnobs_[i].setNormalizedRange (giromin_controller_.getCCOutRangeMin (i),
+                                         giromin_controller_.getCCOutRangeMax (i));
+    ccRangeKnobs_[i].onRangeChanged = [this, i](float lo, float hi)
+    {
+        giromin_controller_.setCCOutRange (i, lo, hi);
+        saveSettings();
+    };
+    addAndMakeVisible (ccRangeKnobs_[i]);
+
+    ccOutValueLabels_[i].setJustificationType (juce::Justification::centred);
+    ccOutValueLabels_[i].setFont (juce::Font (juce::Font::getDefaultMonospacedFontName(), 13.f, juce::Font::plain));
+    ccOutValueLabels_[i].setText ("---", juce::dontSendNotification);
+    addAndMakeVisible (ccOutValueLabels_[i]);
+
+    ccDeleteBtns_[i].setButtonText ("x");
+    ccDeleteBtns_[i].setColour (juce::TextButton::buttonColourId, juce::Colour (0xff5a2222));
+    ccDeleteBtns_[i].setColour (juce::TextButton::textColourOffId, juce::Colours::white.withAlpha (0.7f));
+    ccDeleteBtns_[i].onClick = [this, i]() { removeCCPanel (i); };
+    addAndMakeVisible (ccDeleteBtns_[i]);
+
+    ccCenterBtns_[i].setButtonText ("ctr");
+    ccCenterBtns_[i].setTooltip ("Set current Euler angle as center (avoids the +-pi discontinuity)");
+    ccCenterBtns_[i].onClick = [this, i]()
+    {
+        int sel = ccSourceBoxes_[i].getSelectedId() - 1; // 0-based: 6=E1, 7=E2
+        int eulerIdx = sel - 6; // 0=E1, 1=E2
+        if (eulerIdx >= 0 && eulerIdx < 2)
+        {
+            eulerCenter_[eulerIdx] += (float) eulerSliders_[eulerIdx].getValue();
+            saveSettings();
+        }
+    };
+    addAndMakeVisible (ccCenterBtns_[i]);
+    updateCCCenterButton (i);
 }
 
 void MainComponent::saveSettings()
@@ -437,11 +491,24 @@ void MainComponent::saveSettings()
     p->setValue ("noteB1",       giromin_controller_.getNoteForButton (0));
     p->setValue ("noteB2",       giromin_controller_.getNoteForButton (1));
 
-    p->setValue ("ccOutEnabled", giromin_controller_.getCCOutEnabled());
-    p->setValue ("ccOut14bit",   giromin_controller_.getCCOut14bit());
-    p->setValue ("ccOutSource",  (int)giromin_controller_.getCCOutSource());
-    p->setValue ("ccOutMSB",     giromin_controller_.getCCOutMSB());
-    p->setValue ("ccOutRateHz",  giromin_controller_.getCCOutRateHz());
+    p->setValue ("numCCPanels", numCCPanels_);
+
+    for (int i = 0; i < numCCPanels_; ++i)
+    {
+        juce::String k = "cc" + juce::String (i);
+        p->setValue (k + "Enabled", giromin_controller_.getCCOutEnabled (i));
+        p->setValue (k + "14bit",   giromin_controller_.getCCOut14bit   (i));
+        p->setValue (k + "Source",  (int)giromin_controller_.getCCOutSource (i));
+        p->setValue (k + "MSB",     giromin_controller_.getCCOutMSB     (i));
+        p->setValue (k + "RangeMin", giromin_controller_.getCCOutRangeMin (i));
+        p->setValue (k + "RangeMax", giromin_controller_.getCCOutRangeMax (i));
+    }
+
+    p->setValue ("midiRateHz",   (int) midiRateSlider_.getValue());
+    p->setValue ("eulerOrder",   eulerOrderBox_.getSelectedId());
+    p->setValue ("eulerSource",  eulerSourceBox_.getSelectedId());
+    p->setValue ("eulerCenter0", eulerCenter_[0]);
+    p->setValue ("eulerCenter1", eulerCenter_[1]);
 
     p->saveIfNeeded();
 }
@@ -499,40 +566,60 @@ void MainComponent::loadSettings()
     noteB1Box.setSelectedId (n1 + 1, juce::dontSendNotification);
     noteB2Box.setSelectedId (n2 + 1, juce::dontSendNotification);
 
-    // CC out enabled
-    bool ccEnabled = p->getBoolValue ("ccOutEnabled", false);
-    giromin_controller_.setCCOutEnabled (ccEnabled);
-    ccOutEnableBtn.setToggleState (ccEnabled, juce::dontSendNotification);
-    updateCCEnableButton();
-
-    // CC 14-bit
-    bool cc14 = p->getBoolValue ("ccOut14bit", true);
-    giromin_controller_.setCCOut14bit (cc14);
-    cc14bitBtn.setToggleState (cc14, juce::dontSendNotification);
-    updateCC14bitButton();
-
-    // CC source (0=AX..5=GZ)
-    int srcIdx = p->getIntValue ("ccOutSource", 3);
-    GirominController::CCSource srcs[] = {
-        GirominController::CCSource::AX, GirominController::CCSource::AY,
-        GirominController::CCSource::AZ, GirominController::CCSource::GX,
-        GirominController::CCSource::GY, GirominController::CCSource::GZ
-    };
-    if (srcIdx >= 0 && srcIdx < 6)
+    // Restore CC panel count and setup any extra panels
     {
-        giromin_controller_.setCCOutSource (srcs[srcIdx]);
-        ccSourceBox.setSelectedId (srcIdx + 1, juce::dontSendNotification);
+        int saved = juce::jlimit (3, kMaxCCPanels, p->getIntValue ("numCCPanels", 3));
+        for (int i = numCCPanels_; i < saved; ++i)
+            setupCCPanel (i);
+        numCCPanels_ = saved;
     }
 
-    // CC MSB (item ID = msb + 1)
-    int msb = p->getIntValue ("ccOutMSB", 1);
-    giromin_controller_.setCCOutMSB (msb);
-    ccNumberBox.setSelectedId (msb + 1, juce::dontSendNotification);
+    // CC outputs
+    for (int i = 0; i < numCCPanels_; ++i)
+    {
+        juce::String k = "cc" + juce::String (i);
 
-    // CC rate
-    int rateHz = p->getIntValue ("ccOutRateHz", 10);
-    giromin_controller_.setCCOutRateHz (rateHz);
-    ccRateSlider.setValue (rateHz, juce::dontSendNotification);
+        bool en = p->getBoolValue (k + "Enabled", false);
+        giromin_controller_.setCCOutEnabled (i, en);
+        ccOutEnableBtns_[i].setToggleState (en, juce::dontSendNotification);
+        updateCCEnableButton (i);
+
+        bool b14 = p->getBoolValue (k + "14bit", true);
+        giromin_controller_.setCCOut14bit (i, b14);
+        cc14bitBtns_[i].setToggleState (b14, juce::dontSendNotification);
+        updateCC14bitButton (i);
+
+        int srcIdx = p->getIntValue (k + "Source", i == 0 ? 4 : (i == 1 ? 5 : 6));
+        if (srcIdx >= 0 && srcIdx < 9)
+        {
+            using S = GirominController::CCSource;
+            static const S srcs[] = { S::AX, S::AY, S::AZ, S::GX, S::GY, S::GZ,
+                                       S::EULER1, S::EULER2, S::EULER3 };
+            giromin_controller_.setCCOutSource (i, srcs[srcIdx]);
+            ccSourceBoxes_[i].setSelectedId (srcIdx + 1, juce::dontSendNotification);
+        }
+
+        int msb = p->getIntValue (k + "MSB", i + 1);
+        giromin_controller_.setCCOutMSB (i, msb);
+        ccNumberBoxes_[i].setSelectedId (msb + 1, juce::dontSendNotification);
+
+        float rMin = (float) p->getDoubleValue (k + "RangeMin", -1.0);
+        float rMax = (float) p->getDoubleValue (k + "RangeMax",  1.0);
+        giromin_controller_.setCCOutRange (i, rMin, rMax);
+        ccRangeKnobs_[i].setNormalizedRange (rMin, rMax);
+    }
+
+    {
+        int hz = p->getIntValue ("midiRateHz", 10);
+        midiRateSlider_.setValue (hz, juce::dontSendNotification);
+        for (int i = 0; i < 3; ++i)
+            giromin_controller_.setCCOutRateHz (i, hz);
+    }
+
+    eulerOrderBox_ .setSelectedId (p->getIntValue ("eulerOrder",  1), juce::dontSendNotification);
+    eulerSourceBox_.setSelectedId (p->getIntValue ("eulerSource", 1), juce::dontSendNotification);
+    eulerCenter_[0] = (float) p->getDoubleValue ("eulerCenter0", 0.0);
+    eulerCenter_[1] = (float) p->getDoubleValue ("eulerCenter1", 0.0);
 }
 
 void MainComponent::updateModeButtons()
@@ -605,6 +692,13 @@ void MainComponent::timerCallback()
             break;
     }
     auto euler = eulerFromQuat (ew, ex, ey, ez, oi);
+
+    // Apply center offset for E1 and E2: subtract offset, then wrap to [-π, π]
+    // This prevents the active range from being split by the ±π discontinuity.
+    for (int i = 0; i < 2; ++i)
+        euler[i] = std::atan2 (std::sin (euler[i] - eulerCenter_[i]),
+                               std::cos (euler[i] - eulerCenter_[i]));
+
     eulerSliders_[0].setValue (euler[0], juce::dontSendNotification);
     eulerSliders_[1].setValue (euler[1], juce::dontSendNotification);
     eulerSliders_[2].setValue (euler[2], juce::dontSendNotification);
@@ -621,193 +715,415 @@ void MainComponent::timerCallback()
     };
     for (int i = 0; i < 3; ++i)
         eulerLabels_[i].setText (orderLabels[oi][i], juce::dontSendNotification);
+
+    giromin_controller_.processCCOutputs (d, euler[0], euler[1], euler[2]);
+
+    // Update knob values and output labels
+    const float pi = juce::MathConstants<float>::pi;
+    for (int i = 0; i < numCCPanels_; ++i)
+    {
+        // Raw input value [-1,1] for this CC channel's source
+        float srcVal = 0.f;
+        switch (giromin_controller_.getCCOutSource (i))
+        {
+            case GirominController::CCSource::AX:     srcVal = d.ax; break;
+            case GirominController::CCSource::AY:     srcVal = d.ay; break;
+            case GirominController::CCSource::AZ:     srcVal = d.az; break;
+            case GirominController::CCSource::GX:     srcVal = d.gx; break;
+            case GirominController::CCSource::GY:     srcVal = d.gy; break;
+            case GirominController::CCSource::GZ:     srcVal = d.gz; break;
+            case GirominController::CCSource::EULER1: srcVal = juce::jlimit (-1.f, 1.f, euler[0] / pi);          break;
+            case GirominController::CCSource::EULER2: srcVal = juce::jlimit (-1.f, 1.f, euler[1] / pi);          break;
+            case GirominController::CCSource::EULER3: srcVal = juce::jlimit (-1.f, 1.f, euler[2] / (pi * 0.5f)); break;
+        }
+
+        // Mapped output value [0,1] — handles inverted ranges
+        float rMin = giromin_controller_.getCCOutRangeMin (i);
+        float rMax = giromin_controller_.getCCOutRangeMax (i);
+        float span = rMax - rMin;
+        float outVal = (std::abs (span) > 0.001f)
+                        ? juce::jlimit (0.f, 1.f, (srcVal - rMin) / span)
+                        : 0.f;
+
+        ccRangeKnobs_[i].setInputValue  (srcVal);
+        ccRangeKnobs_[i].setOutputValue (outVal);
+
+        // Output value label
+        int v14 = giromin_controller_.getCCOutLastVal14 (i);
+        if (v14 < 0)
+            ccOutValueLabels_[i].setText ("---", juce::dontSendNotification);
+        else if (giromin_controller_.getCCOut14bit (i))
+            ccOutValueLabels_[i].setText (juce::String (v14), juce::dontSendNotification);
+        else
+            ccOutValueLabels_[i].setText (juce::String (v14 >> 7), juce::dontSendNotification);
+    }
+}
+
+void MainComponent::addCCPanel()
+{
+    if (numCCPanels_ >= kMaxCCPanels) return;
+    setupCCPanel (numCCPanels_);
+    ++numCCPanels_;
+    setSize (getWidth(), computeContentHeight());
+    resized();
+    repaint();
+    saveSettings();
+}
+
+void MainComponent::removeCCPanel (int idx)
+{
+    if (numCCPanels_ <= 1 || idx < 0 || idx >= numCCPanels_) return;
+
+    // Shift all panels above idx down by one slot
+    for (int i = idx; i < numCCPanels_ - 1; ++i)
+    {
+        // Copy controller config
+        giromin_controller_.setCCOutEnabled (i, giromin_controller_.getCCOutEnabled (i + 1));
+        giromin_controller_.setCCOutSource  (i, giromin_controller_.getCCOutSource  (i + 1));
+        giromin_controller_.setCCOutMSB     (i, giromin_controller_.getCCOutMSB     (i + 1));
+        giromin_controller_.setCCOut14bit   (i, giromin_controller_.getCCOut14bit   (i + 1));
+        giromin_controller_.setCCOutRange   (i, giromin_controller_.getCCOutRangeMin (i + 1),
+                                                giromin_controller_.getCCOutRangeMax (i + 1));
+
+        // Sync widgets from new controller state
+        ccOutEnableBtns_[i].setToggleState (giromin_controller_.getCCOutEnabled (i), juce::dontSendNotification);
+        updateCCEnableButton (i);
+
+        ccSourceBoxes_[i].setSelectedId (ccSourceBoxes_[i + 1].getSelectedId(), juce::dontSendNotification);
+
+        ccNumberBoxes_[i].setSelectedId (ccNumberBoxes_[i + 1].getSelectedId(), juce::dontSendNotification);
+
+        cc14bitBtns_[i].setToggleState (giromin_controller_.getCCOut14bit (i), juce::dontSendNotification);
+        updateCC14bitButton (i);
+
+        ccRangeKnobs_[i].setNormalizedRange (giromin_controller_.getCCOutRangeMin (i),
+                                             giromin_controller_.getCCOutRangeMax (i));
+        updateCCCenterButton (i);
+    }
+
+    // Clear the last (now duplicate) slot from controller and hide its widgets
+    int last = numCCPanels_ - 1;
+    giromin_controller_.setCCOutEnabled (last, false);
+    giromin_controller_.setCCOutRange   (last, -1.f, 1.f);
+
+    ccOutLabels_[last]     .setVisible (false);
+    ccOutEnableBtns_[last] .setVisible (false);
+    ccSourceBoxes_[last]   .setVisible (false);
+    ccNumberBoxes_[last]   .setVisible (false);
+    cc14bitBtns_[last]     .setVisible (false);
+    ccRangeKnobs_[last]    .setVisible (false);
+    ccOutValueLabels_[last].setVisible (false);
+    ccDeleteBtns_[last]    .setVisible (false);
+    ccCenterBtns_[last]    .setVisible (false);
+
+    --numCCPanels_;
+    setSize (getWidth(), computeContentHeight());
+    resized();
+    repaint();
+    saveSettings();
+}
+
+int MainComponent::computeContentHeight() const
+{
+    const int P = 10, CG = 8, rowH = 34, gap = 4;
+    const int inputContentH = 30 + 10 + 3*(rowH+gap) + 10 + 3*(rowH+gap) + 10 + 36 + 10 + 26 + 6 + 138;
+    const int noteContentH  = 20 + 6 + 26;
+    const int btnCardH      = 26;
+    const int ccContentH    = 24 + 28 + 28 + 8 + 90 + 2 + 18;
+
+    int numSlots = (numCCPanels_ < kMaxCCPanels) ? numCCPanels_ + 1 : numCCPanels_;
+    int ccRows   = (numSlots > 4) ? 2 : 1;
+
+    int h = 16;   // reduced(8) border on each side
+    h += (inputContentH + P*2) + CG;
+    h += (noteContentH  + P*2) + CG;
+    h += (btnCardH      + P*2) + CG;
+    h += ccRows * (ccContentH + P*2) + (ccRows > 1 ? CG : 0);
+    h += 20;      // bottom padding
+    return h;
+}
+
+void MainComponent::mouseDown (const juce::MouseEvent& e)
+{
+    if (numCCPanels_ < kMaxCCPanels
+        && ccCards_[kMaxCCPanels].contains (e.getPosition()))
+        addCCPanel();
 }
 
 //==============================================================================
+static void drawCard (juce::Graphics& g, juce::Rectangle<int> r, const char* title)
+{
+    g.setColour (juce::Colour (0xff222222));
+    g.fillRoundedRectangle (r.toFloat(), 8.f);
+    g.setColour (juce::Colour (0xff3a3a3a));
+    g.drawRoundedRectangle (r.toFloat().reduced (0.5f), 8.f, 1.f);
+
+    if (title && title[0])
+    {
+        g.setColour (juce::Colours::white.withAlpha (0.35f));
+        g.setFont (juce::Font (juce::FontOptions().withHeight (11.f)));
+        g.drawText (title,
+                    r.removeFromTop (18).reduced (8, 0),
+                    juce::Justification::centredLeft);
+    }
+}
+
 void MainComponent::paint (juce::Graphics& g)
 {
     g.fillAll (getLookAndFeel().findColour (juce::ResizableWindow::backgroundColourId));
+
+    drawCard (g, inputCard_, "Input");
+    drawCard (g, noteCard_,  "MIDI Output");
+    drawCard (g, b1Card_, "");
+    drawCard (g, b2Card_, "");
+
+    for (int i = 0; i < numCCPanels_; ++i)
+    {
+        char buf[8];
+        snprintf (buf, sizeof (buf), "CC %d", i + 1);
+        drawCard (g, ccCards_[i], buf);
+    }
+
+    // "+" placeholder card
+    if (numCCPanels_ < kMaxCCPanels)
+    {
+        drawCard (g, ccCards_[kMaxCCPanels], "");
+        auto r = ccCards_[kMaxCCPanels].toFloat();
+        g.setColour (juce::Colours::white.withAlpha (0.18f));
+        g.setFont (juce::Font (juce::FontOptions().withHeight (28.f)));
+        g.drawText ("+", r, juce::Justification::centred);
+        g.setFont (juce::Font (juce::FontOptions().withHeight (11.f)));
+        g.drawText ("Add mapping",
+                    r.withTrimmedTop (r.getHeight() * 0.6f),
+                    juce::Justification::centred);
+    }
 }
 
 void MainComponent::resized()
 {
-    auto area = getLocalBounds().reduced (10);
+    const int P   = 10;   // card inner padding
+    const int CG  = 8;    // gap between cards
+    const int rowH = 34, gap = 4, labelW = 30;
 
-    // ── INPUT section ────────────────────────────────────────────────────────
+    auto area = getLocalBounds().reduced (8);
 
-    // Mode bar (full width, inside input)
-    auto topBar = area.removeFromTop (30);
-    oscModeBtn .setBounds (topBar.removeFromLeft (60));
-    topBar.removeFromLeft (6);
-    midiModeBtn.setBounds (topBar.removeFromLeft (60));
-    topBar.removeFromLeft (10);
-    midiInputSelector.setBounds (topBar.removeFromLeft (220));
-
-    area.removeFromTop (10);
-
-    const int labelW = 30;
-    const int rowH   = 34;
-    const int gap    = 4;
-
-    // Height for 6 sliders + buttons + euler section (10 + 26 combo + 6 + 120 sliders)
-    const int inputAreaH = 3 * (rowH + gap) + 10 + 3 * (rowH + gap) + 10 + 36 + 10 + 26 + 6 + 120;
-
-    auto inputArea = area.removeFromTop (inputAreaH);
-
-    // Left: quaternion visualizer + yaw slider below it
-    auto vizArea = inputArea.removeFromLeft (280);
-    inputArea.removeFromLeft (10);
-
-    const int yawRowH  = 28;
-    const int quatRowH = 20;
-    const int fpsRowH  = 28;
-
-    // Reserve space bottom-up: fps, 4 quat labels, yaw slider
+    // ── Input Card ────────────────────────────────────────────────────────────
+    const int inputContentH = 30 + 10
+                              + 3 * (rowH + gap) + 10
+                              + 3 * (rowH + gap) + 10
+                              + 36 + 10 + 26 + 6 + 138;
+    inputCard_ = area.removeFromTop (inputContentH + P * 2);
+    area.removeFromTop (CG);
     {
-        auto fpsRow = vizArea.removeFromBottom (fpsRowH);
-        fpsLabel_.setBounds (fpsRow.removeFromLeft (30));
-        fpsSlider_.setBounds (fpsRow);
-    }
+        auto inner = inputCard_.reduced (P);
 
-    quatLabel_.setBounds (vizArea.removeFromBottom (quatRowH));
+        auto topBar = inner.removeFromTop (30);
+        oscModeBtn .setBounds (topBar.removeFromLeft (60));
+        topBar.removeFromLeft (6);
+        midiModeBtn.setBounds (topBar.removeFromLeft (60));
+        topBar.removeFromLeft (10);
+        midiInputSelector.setBounds (topBar.removeFromLeft (220));
 
-    auto yawRow = vizArea.removeFromBottom (yawRowH);
-    yawLabel_.setBounds (yawRow.removeFromLeft (70));
-    yawSlider_.setBounds (yawRow);
+        inner.removeFromTop (10);
 
-    quatViz_.setBounds (vizArea);
+        auto inputArea = inner.removeFromTop (inputContentH - 30 - 10);
 
-    // Right: sliders + buttons
-    // ── Acelerômetro ─────────────────────────────────────────────────────────
-    for (int i = 0; i < 3; ++i)
-    {
-        auto row = inputArea.removeFromTop (rowH);
-        inputArea.removeFromTop (gap);
-        accelLabels[i].setBounds (row.removeFromLeft (labelW));
-        accelSliders[i].setBounds (row);
-    }
+        auto vizArea = inputArea.removeFromLeft (280);
+        inputArea.removeFromLeft (10);
 
-    inputArea.removeFromTop (10);
+        {
+            auto fpsRow = vizArea.removeFromBottom (28);
+            fpsLabel_.setBounds (fpsRow.removeFromLeft (30));
+            fpsSlider_.setBounds (fpsRow);
+        }
+        quatLabel_.setBounds (vizArea.removeFromBottom (20));
+        auto yawRow = vizArea.removeFromBottom (28);
+        yawLabel_.setBounds (yawRow.removeFromLeft (70));
+        yawSlider_.setBounds (yawRow);
+        quatViz_.setBounds (vizArea);
 
-    // ── Giroscópio ───────────────────────────────────────────────────────────
-    for (int i = 0; i < 3; ++i)
-    {
-        auto row = inputArea.removeFromTop (rowH);
-        inputArea.removeFromTop (gap);
-        gyroLabels[i].setBounds (row.removeFromLeft (labelW));
-        gyroSliders[i].setBounds (row);
-    }
-
-    inputArea.removeFromTop (10);
-
-    // ── Botões ───────────────────────────────────────────────────────────────
-    {
-        auto row = inputArea.removeFromTop (36);
-        btnToggles[0].setBounds (row.removeFromLeft (80));
-        row.removeFromLeft (10);
-        btnToggles[1].setBounds (row.removeFromLeft (80));
-    }
-
-    // ── Euler angles ─────────────────────────────────────────────────────────
-    inputArea.removeFromTop (10);
-    {
-        auto row = inputArea.removeFromTop (26);
-        int half = row.getWidth() / 2;
-        eulerOrderBox_ .setBounds (row.removeFromLeft (half - 2));
-        row.removeFromLeft (4);
-        eulerSourceBox_.setBounds (row);
-    }
-    inputArea.removeFromTop (6);
-
-    {
-        auto eulerArea = inputArea.removeFromTop (120);
-        int sliderW = eulerArea.getWidth() / 3;
         for (int i = 0; i < 3; ++i)
         {
-            auto col = (i < 2) ? eulerArea.removeFromLeft (sliderW)
-                                : eulerArea;
-            auto labelRow = col.removeFromBottom (18);
-            eulerSliders_[i].setBounds (col);
-            eulerLabels_[i].setBounds (labelRow);
+            auto row = inputArea.removeFromTop (rowH);
+            inputArea.removeFromTop (gap);
+            accelLabels[i].setBounds (row.removeFromLeft (labelW));
+            accelSliders[i].setBounds (row);
+        }
+        inputArea.removeFromTop (10);
+        for (int i = 0; i < 3; ++i)
+        {
+            auto row = inputArea.removeFromTop (rowH);
+            inputArea.removeFromTop (gap);
+            gyroLabels[i].setBounds (row.removeFromLeft (labelW));
+            gyroSliders[i].setBounds (row);
+        }
+        inputArea.removeFromTop (10);
+        {
+            auto row = inputArea.removeFromTop (36);
+            btnToggles[0].setBounds (row.removeFromLeft (80));
+            row.removeFromLeft (10);
+            btnToggles[1].setBounds (row.removeFromLeft (80));
+        }
+        inputArea.removeFromTop (10);
+        {
+            auto row = inputArea.removeFromTop (26);
+            int half = row.getWidth() / 2;
+            eulerOrderBox_ .setBounds (row.removeFromLeft (half - 2));
+            row.removeFromLeft (4);
+            eulerSourceBox_.setBounds (row);
+        }
+        inputArea.removeFromTop (6);
+        {
+            auto eulerArea = inputArea.removeFromTop (138);
+            int sliderW = eulerArea.getWidth() / 3;
+            for (int i = 0; i < 3; ++i)
+            {
+                auto col = (i < 2) ? eulerArea.removeFromLeft (sliderW) : eulerArea;
+                if (i < 2)
+                {
+                    auto btnRow = col.removeFromBottom (20);
+                    col.removeFromBottom (2);
+                    eulerCenterResetBtns_[i].setBounds (btnRow);
+                }
+                auto labelRow = col.removeFromBottom (18);
+                eulerSliders_[i].setBounds (col);
+                eulerLabels_[i].setBounds (labelRow);
+            }
         }
     }
 
-    area.removeFromTop (14);
-
-    // ── Painel Note Output ───────────────────────────────────────────────────
-    noteOutputLabel.setBounds (area.removeFromTop (20));
-    area.removeFromTop (6);
-
-    const int colLabelW = 46;
-    const int colW      = 180;
-    const int smallW    = 70;
-
-    // Linha 1: Device
+    // ── Note Output Card ──────────────────────────────────────────────────────
+    const int noteContentH = 20 + 6 + 26;
+    noteCard_ = area.removeFromTop (noteContentH + P * 2);
+    area.removeFromTop (CG);
     {
-        auto row = area.removeFromTop (26);
-        area.removeFromTop (gap);
-        midiOutLabel.setBounds (row.removeFromLeft (colLabelW));
-        row.removeFromLeft (4);
-        midiOutputSelector.setBounds (row.removeFromLeft (colW));
-    }
+        auto inner = noteCard_.reduced (P);
+        const int colLabelW = 30, smallW = 62;
 
-    // Linha 2: Channel
-    {
-        auto row = area.removeFromTop (26);
-        area.removeFromTop (gap);
-        noteChLabel.setBounds (row.removeFromLeft (colLabelW));
-        row.removeFromLeft (4);
-        noteChannelBox.setBounds (row.removeFromLeft (smallW));
-    }
+        noteOutputLabel.setBounds (inner.removeFromTop (20));
+        inner.removeFromTop (6);
 
-    // Linha 3: B1 note / B2 note
-    {
-        auto row = area.removeFromTop (26);
-        noteB1Label.setBounds (row.removeFromLeft (colLabelW));
-        row.removeFromLeft (4);
-        noteB1Box.setBounds (row.removeFromLeft (smallW));
-        row.removeFromLeft (16);
-        noteB2Label.setBounds (row.removeFromLeft (colLabelW));
-        row.removeFromLeft (4);
-        noteB2Box.setBounds (row.removeFromLeft (smallW));
-    }
-
-    area.removeFromTop (14);
-
-    // ── Painel CC Output ─────────────────────────────────────────────────────
-    {
-        auto headerRow = area.removeFromTop (20);
-        ccOutLabel.setBounds (headerRow.removeFromLeft (100));
-        headerRow.removeFromLeft (8);
-        ccOutEnableBtn.setBounds (headerRow.removeFromLeft (70));
-        area.removeFromTop (6);
-
-        // Source
         {
-            auto row = area.removeFromTop (26);
-            area.removeFromTop (gap);
-            ccSourceLabel.setBounds (row.removeFromLeft (colLabelW));
+            auto row = inner.removeFromTop (26);
+            midiOutLabel.setBounds (row.removeFromLeft (colLabelW));
             row.removeFromLeft (4);
-            ccSourceBox.setBounds (row.removeFromLeft (colW));
-        }
-
-        // CC number
-        {
-            auto row = area.removeFromTop (26);
-            area.removeFromTop (gap);
-            ccNumberLabel.setBounds (row.removeFromLeft (colLabelW));
-            row.removeFromLeft (4);
-            ccNumberBox.setBounds (row.removeFromLeft (colW));
-        }
-
-        // Rate + 14/7-bit toggle
-        {
-            auto row = area.removeFromTop (26);
-            ccRateLabel.setBounds (row.removeFromLeft (colLabelW));
-            row.removeFromLeft (4);
-            ccRateSlider.setBounds (row.removeFromLeft (colW));
+            midiOutputSelector.setBounds (row.removeFromLeft (160));
             row.removeFromLeft (8);
-            cc14bitBtn.setBounds (row.removeFromLeft (60));
+            noteChLabel.setBounds (row.removeFromLeft (colLabelW));
+            row.removeFromLeft (4);
+            noteChannelBox.setBounds (row.removeFromLeft (smallW));
+            row.removeFromLeft (8);
+            midiRateLabel_.setBounds (row.removeFromLeft (22));
+            row.removeFromLeft (2);
+            midiRateSlider_.setBounds (row);
+        }
+    }
+
+    // ── B1 / B2 mini-cards ────────────────────────────────────────────────────
+    {
+        const int btnCardH = 26;
+        auto btnRow = area.removeFromTop (btnCardH + P * 2);
+        area.removeFromTop (CG);
+        int half = (btnRow.getWidth() - CG) / 2;
+
+        b1Card_ = btnRow.removeFromLeft (half);
+        btnRow.removeFromLeft (CG);
+        b2Card_ = btnRow;
+
+        {
+            auto inner = b1Card_.reduced (P);
+            noteB1Label.setBounds (inner.removeFromLeft (30));
+            inner.removeFromLeft (4);
+            noteB1Box.setBounds (inner);
+        }
+        {
+            auto inner = b2Card_.reduced (P);
+            noteB2Label.setBounds (inner.removeFromLeft (30));
+            inner.removeFromLeft (4);
+            noteB2Box.setBounds (inner);
+        }
+    }
+
+    // ── CC Cards (dynamic) + Placeholder Card ────────────────────────────────
+    const int ccContentH = 24 + 28 + 28 + 8 + 90 + 2 + 18;
+
+    // Helper: lay out widgets for one CC panel inside its card rect
+    auto layoutCCPanel = [&](int i, juce::Rectangle<int> cardRect)
+    {
+        ccCards_[i] = cardRect;
+        auto col = cardRect.reduced (P);
+
+        {
+            auto row = col.removeFromTop (20);
+            col.removeFromTop (4);
+            ccOutLabels_[i].setBounds (row.removeFromLeft (34));
+            row.removeFromLeft (4);
+            ccOutEnableBtns_[i].setBounds (row.removeFromLeft (46));
+            row.removeFromRight (4);
+            ccDeleteBtns_[i].setBounds (row.removeFromRight (22));
+        }
+
+        {
+            auto row = col.removeFromTop (24);
+            row.removeFromRight (4);
+            ccCenterBtns_[i].setBounds (row.removeFromRight (36));
+            row.removeFromRight (4);
+            ccSourceBoxes_[i].setBounds (row);
+        }
+        col.removeFromTop (gap);
+
+        {
+            auto row = col.removeFromTop (24);
+            col.removeFromTop (gap);
+            cc14bitBtns_[i].setBounds (row.removeFromRight (34));
+            row.removeFromRight (4);
+            ccNumberBoxes_[i].setBounds (row);
+        }
+
+        col.removeFromTop (8);
+        {
+            int knobSize = juce::jmin (col.getWidth(), 90);
+            int knobX = col.getX() + (col.getWidth() - knobSize) / 2;
+            ccRangeKnobs_[i].setBounds (knobX, col.getY(), knobSize, knobSize);
+            col.removeFromTop (knobSize + 2);
+            ccOutValueLabels_[i].setBounds (col.removeFromTop (18));
+        }
+    };
+
+    // Helper: lay out one row of up to 4 slots starting at startSlot
+    auto layoutCCRow = [&](juce::Rectangle<int> rowArea, int startSlot)
+    {
+        int numSlots  = (numCCPanels_ < kMaxCCPanels) ? numCCPanels_ + 1 : numCCPanels_;
+        int slotsLeft = juce::jmin (4, numSlots - startSlot);
+        int cw        = (rowArea.getWidth() - (slotsLeft - 1) * CG) / slotsLeft;
+
+        for (int col = 0; col < slotsLeft; ++col)
+        {
+            int slot = startSlot + col;
+            juce::Rectangle<int> cardRect = (col < slotsLeft - 1)
+                ? rowArea.removeFromLeft (cw)
+                : rowArea;
+            if (col < slotsLeft - 1) rowArea.removeFromLeft (CG);
+
+            if (slot < numCCPanels_)
+                layoutCCPanel (slot, cardRect);
+            else
+                ccCards_[kMaxCCPanels] = cardRect;   // "+" placeholder
+        }
+    };
+
+    {
+        int numSlots = (numCCPanels_ < kMaxCCPanels) ? numCCPanels_ + 1 : numCCPanels_;
+        bool twoRows = (numSlots > 4);
+
+        auto ccRow1 = area.removeFromTop (ccContentH + P * 2);
+        layoutCCRow (ccRow1, 0);
+
+        if (twoRows)
+        {
+            area.removeFromTop (CG);
+            auto ccRow2 = area.removeFromTop (ccContentH + P * 2);
+            layoutCCRow (ccRow2, 4);
         }
     }
 }

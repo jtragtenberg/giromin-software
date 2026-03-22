@@ -26,14 +26,26 @@ class GirominController
 {
 public:
     enum class InputMode  { OSC, MIDI };
-    enum class CCSource   { AX, AY, AZ, GX, GY, GZ };
+    enum class CCSource   { AX, AY, AZ, GX, GY, GZ, EULER1, EULER2, EULER3 };
 
-    // Todos os dados normalizados para [0,1] conforme midi_cc_map.h
-    // Centro/repouso = 0.5 para accel e gyro; botões: 0.0 ou 1.0
+    struct CCOutConfig
+    {
+        bool     enabled    = false;
+        CCSource source     = CCSource::GX;
+        int      msb        = 1;
+        int      rateHz     = 10;
+        bool     use14bit   = true;
+        double   lastSendMs = 0.0;
+        int      lastVal14  = -1;
+        float    rangeMin   = -1.f;  // input sub-range [rangeMin, rangeMax] mapped to [0,1]
+        float    rangeMax   =  1.f;
+    };
+
+    // Dados normalizados para [-1,1] (accel/gyro); botões: 0.0 ou 1.0
     struct SensorDisplayData
     {
-        float ax = 0.5f, ay = 0.5f, az = 0.5f;
-        float gx = 0.5f, gy = 0.5f, gz = 0.5f;
+        float ax = 0.f, ay = 0.f, az = 0.f;
+        float gx = 0.f, gy = 0.f, gz = 0.f;
         float b1 = 0.f,  b2 = 0.f;
         float qw = 1.f,  qx = 0.f, qy = 0.f, qz = 0.f;
     };
@@ -105,17 +117,70 @@ public:
     int  getNoteChannel()               const { return note_channel_; }
     int  getNoteForButton (int btn)     const { return note_for_btn_[btn]; }
 
-    // ── Configuração de CC output 14-bit ──────────────────────────────────────
-    void setCCOutEnabled (bool on)        { cc_out_enabled_ = on; }
-    void setCCOutSource  (CCSource src)   { cc_out_source_  = src; }
-    void setCCOutMSB     (int msb_cc)     { cc_out_msb_     = juce::jlimit (0, 31, msb_cc); }
-    void setCCOutRateHz  (int hz)         { cc_out_rate_hz_ = juce::jlimit (1, 200, hz); }
-    void setCCOut14bit   (bool use14bit)  { cc_out_14bit_   = use14bit; cc_out_last_value14_ = -1; }
-    bool     getCCOutEnabled() const      { return cc_out_enabled_; }
-    CCSource getCCOutSource()  const      { return cc_out_source_; }
-    int      getCCOutMSB()     const      { return cc_out_msb_; }
-    int      getCCOutRateHz()  const      { return cc_out_rate_hz_; }
-    bool     getCCOut14bit()   const      { return cc_out_14bit_; }
+    // ── Configuração de 3 CC outputs independentes ───────────────────────────
+    void setCCOutEnabled (int i, bool on)       { ccOut_[i].enabled  = on; }
+    void setCCOutSource  (int i, CCSource src)  { ccOut_[i].source   = src; }
+    void setCCOutMSB     (int i, int msb)       { ccOut_[i].msb      = juce::jlimit (0, 31, msb); }
+    void setCCOutRateHz  (int i, int hz)        { ccOut_[i].rateHz   = juce::jlimit (1, 200, hz); }
+    void setCCOut14bit   (int i, bool b)        { ccOut_[i].use14bit = b; ccOut_[i].lastVal14 = -1; }
+    void setCCOutRange   (int i, float lo, float hi) { ccOut_[i].rangeMin = lo; ccOut_[i].rangeMax = hi; ccOut_[i].lastVal14 = -1; }
+    bool     getCCOutEnabled  (int i) const     { return ccOut_[i].enabled; }
+    CCSource getCCOutSource   (int i) const     { return ccOut_[i].source; }
+    int      getCCOutMSB      (int i) const     { return ccOut_[i].msb; }
+    int      getCCOutRateHz   (int i) const     { return ccOut_[i].rateHz; }
+    bool     getCCOut14bit    (int i) const     { return ccOut_[i].use14bit; }
+    float    getCCOutRangeMin  (int i) const    { return ccOut_[i].rangeMin; }
+    float    getCCOutRangeMax  (int i) const    { return ccOut_[i].rangeMax; }
+    int      getCCOutLastVal14 (int i) const    { return ccOut_[i].lastVal14; }
+    const CCOutConfig& getCCOutConfig (int i)   const { return ccOut_[i]; }
+
+    // Called from timerCallback with the currently displayed Euler angles
+    // e1=first, e2=last, e3=mid(constrained).  ranges: e1/e2 ∈ [-π,π], e3 ∈ [-π/2,π/2]
+    void processCCOutputs (const SensorDisplayData& d, float e1, float e2, float e3)
+    {
+        const float pi = juce::MathConstants<float>::pi;
+        double now_ms = juce::Time::getMillisecondCounterHiRes();
+
+        for (int i = 0; i < 8; ++i)
+        {
+            auto& cfg = ccOut_[i];
+            if (!cfg.enabled) continue;
+
+            float srcVal = 0.f;
+            switch (cfg.source)
+            {
+                case CCSource::AX:     srcVal = d.ax; break;
+                case CCSource::AY:     srcVal = d.ay; break;
+                case CCSource::AZ:     srcVal = d.az; break;
+                case CCSource::GX:     srcVal = d.gx; break;
+                case CCSource::GY:     srcVal = d.gy; break;
+                case CCSource::GZ:     srcVal = d.gz; break;
+                case CCSource::EULER1: srcVal = juce::jlimit (-1.f, 1.f, e1 / pi);          break;
+                case CCSource::EULER2: srcVal = juce::jlimit (-1.f, 1.f, e2 / pi);          break;
+                case CCSource::EULER3: srcVal = juce::jlimit (-1.f, 1.f, e3 / (pi * 0.5f)); break;
+            }
+
+            // Apply input sub-range mapping: [rangeMin, rangeMax] → [0, 1]
+            // Works for both normal (min < max) and inverted (min > max) ranges.
+            float span = cfg.rangeMax - cfg.rangeMin;
+            if (std::abs (span) > 0.001f)
+                srcVal = juce::jlimit (0.f, 1.f, (srcVal - cfg.rangeMin) / span);
+
+            double interval_ms = 1000.0 / cfg.rateHz;
+            int    val14 = (int)(srcVal * 16383.f);
+
+            if ((now_ms - cfg.lastSendMs) >= interval_ms && val14 != cfg.lastVal14)
+            {
+                if (cfg.use14bit)
+                    midi_handler_.sendCC14 (note_channel_, cfg.msb, srcVal);
+                else
+                    midi_handler_.outputMidiMessage (note_channel_, cfg.msb,
+                                                     juce::jlimit (0, 127, (int)(srcVal * 127.f)));
+                cfg.lastSendMs = now_ms;
+                cfg.lastVal14  = val14;
+            }
+        }
+    }
     
     GirominData* getGiromin (int index)
     {
@@ -129,22 +194,22 @@ private:
     {
         auto* g = getGiromin(0);
 
-        // Normaliza dado armazenado de volta para [0,1] conforme midi_cc_map.h
+        // Normaliza dado armazenado para [-1,1]
         // Encoding: midi14 = (raw_int16 + 32768) >> 2  →  range [0, 16383], centro = 8192
-        auto raw_to_01 = [](float stored, float norm_constant) -> float
+        auto raw_to_11 = [](float stored, float norm_constant) -> float
         {
             float raw_int16 = stored / norm_constant;
             float value14   = (raw_int16 + 32768.f) / 4.f;
-            return juce::jlimit (0.f, 1.f, value14 / 16383.f);
+            return juce::jlimit (-1.f, 1.f, value14 / 8191.5f - 1.f);
         };
 
         SensorDisplayData d;
-        d.ax = raw_to_01 (g->getAX(), A_NORMALISATION_CONSTANT);
-        d.ay = raw_to_01 (g->getAY(), A_NORMALISATION_CONSTANT);
-        d.az = raw_to_01 (g->getAZ(), A_NORMALISATION_CONSTANT);
-        d.gx = raw_to_01 (g->getGX(), G_NORMALISATION_CONSTANT);
-        d.gy = raw_to_01 (g->getGY(), G_NORMALISATION_CONSTANT);
-        d.gz = raw_to_01 (g->getGZ(), G_NORMALISATION_CONSTANT);
+        d.ax = raw_to_11 (g->getAX(), A_NORMALISATION_CONSTANT);
+        d.ay = raw_to_11 (g->getAY(), A_NORMALISATION_CONSTANT);
+        d.az = raw_to_11 (g->getAZ(), A_NORMALISATION_CONSTANT);
+        d.gx = raw_to_11 (g->getGX(), G_NORMALISATION_CONSTANT);
+        d.gy = raw_to_11 (g->getGY(), G_NORMALISATION_CONSTANT);
+        d.gz = raw_to_11 (g->getGZ(), G_NORMALISATION_CONSTANT);
         d.b1 = g->getB1();
         d.b2 = g->getB2();
         d.qw = g->getQ1();
@@ -186,38 +251,7 @@ private:
         processButtonNote (d.b1, prev_b1_raw_, 0);
         processButtonNote (d.b2, prev_b2_raw_, 1);
 
-        //===============================================================================================
-        // CC OUTPUT 14-bit
-        //===============================================================================================
-        if (cc_out_enabled_)
-        {
-            float src_val = 0.5f;
-            switch (cc_out_source_)
-            {
-                case CCSource::AX: src_val = d.ax; break;
-                case CCSource::AY: src_val = d.ay; break;
-                case CCSource::AZ: src_val = d.az; break;
-                case CCSource::GX: src_val = d.gx; break;
-                case CCSource::GY: src_val = d.gy; break;
-                case CCSource::GZ: src_val = d.gz; break;
-            }
-
-            double now_ms      = juce::Time::getMillisecondCounterHiRes();
-            double interval_ms = 1000.0 / cc_out_rate_hz_;
-            int    value14     = (int)(src_val * 16383.f);
-
-            if ((now_ms - cc_out_last_send_ms_) >= interval_ms
-                && value14 != cc_out_last_value14_)
-            {
-                if (cc_out_14bit_)
-                    midi_handler_.sendCC14 (note_channel_, cc_out_msb_, src_val);
-                else
-                    midi_handler_.outputMidiMessage (note_channel_, cc_out_msb_,
-                                                     juce::jlimit (0, 127, (int)(src_val * 127.f)));
-                cc_out_last_send_ms_  = now_ms;
-                cc_out_last_value14_  = value14;
-            }
-        }
+        // CC output is now driven by processCCOutputs() called from timerCallback
     }
 
     // ── Decodificação de MIDI CC 14-bit → float normalizado ──────────────────
@@ -371,14 +405,8 @@ private:
     float prev_b1_raw_     = 0.f;
     float prev_b2_raw_     = 0.f;
 
-    // CC output
-    bool     cc_out_enabled_      = false;
-    bool     cc_out_14bit_        = true;   // true = 14-bit (MSB+LSB), false = 7-bit
-    CCSource cc_out_source_       = CCSource::GX;
-    int      cc_out_msb_          = 1;      // Modulation Wheel por padrão
-    int      cc_out_rate_hz_      = 10;
-    double   cc_out_last_send_ms_ = 0.0;
-    int      cc_out_last_value14_ = -1;     // -1 força envio na primeira vez
+    // Up to 8 independent CC outputs
+    CCOutConfig ccOut_[8];
 
     // MSBs pendentes para montagem de pares 14-bit: msb_pending_[giromin_idx][cc_number]
     // -1 = nenhum MSB pendente para este campo

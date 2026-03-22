@@ -10,6 +10,35 @@
 #include "MainComponent.h"
 
 //==============================================================================
+// Wraps MainComponent in a Viewport so the window can be smaller than the
+// full content height and the user can scroll vertically.
+class ScrollableWrapper : public juce::Component
+{
+public:
+    ScrollableWrapper()
+    {
+        viewport_.setViewedComponent (&content_, false);
+        viewport_.setScrollBarsShown (true, false);   // vertical only
+        addAndMakeVisible (viewport_);
+        // Initial preferred size
+        setSize (content_.getWidth() + viewport_.getScrollBarThickness(), 860);
+    }
+
+    void resized() override
+    {
+        viewport_.setBounds (getLocalBounds());
+        // Keep content width flush with viewport (no horizontal scroll)
+        content_.setSize (viewport_.getMaximumVisibleWidth(), content_.getHeight());
+    }
+
+private:
+    MainComponent   content_;
+    juce::Viewport  viewport_;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ScrollableWrapper)
+};
+
+//==============================================================================
 class OSC_HandlerApplication  : public juce::JUCEApplication
 {
 public:
@@ -65,7 +94,7 @@ public:
                               DocumentWindow::allButtons)
         {
             setUsingNativeTitleBar (true);
-            setContentOwned (new MainComponent(), true);
+            setContentOwned (new ScrollableWrapper(), true);
 
            #if JUCE_IOS || JUCE_ANDROID
             setFullScreen (true);

@@ -6,6 +6,8 @@
     <GROUP id="{FAE42C1F-5033-8EBF-469A-D5887473EBA2}" name="Source">
       <FILE id="CvHS2N" name="IMUGestureToolkit.h" compile="0" resource="0"
             file="Source/IMUGestureToolkit.h"/>
+      <FILE id="RngKnb" name="RangeKnob.h" compile="0" resource="0"
+            file="Source/RangeKnob.h"/>
       <FILE id="Puabdn" name="MidiHandler.h" compile="0" resource="0" file="Source/MidiHandler.h"/>
       <FILE id="HiimPr" name="GirominController.h" compile="0" resource="0"
             file="Source/GirominController.h"/>
