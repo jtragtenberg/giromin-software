@@ -30,15 +30,16 @@ public:
 
     struct CCOutConfig
     {
-        bool     enabled    = false;
-        CCSource source     = CCSource::GX;
-        int      msb        = 1;
-        int      rateHz     = 10;
-        bool     use14bit   = true;
-        double   lastSendMs = 0.0;
-        int      lastVal14  = -1;
-        float    rangeMin   = -1.f;  // input sub-range [rangeMin, rangeMax] mapped to [0,1]
-        float    rangeMax   =  1.f;
+        bool              enabled    = false;
+        CCSource          source     = CCSource::GX;
+        int               msb        = 1;
+        int               rateHz     = 10;
+        bool              use14bit   = true;
+        double            lastSendMs = 0.0;
+        int               lastVal14  = -1;   // kept for UI display
+        float             rangeMin   = -1.f;
+        float             rangeMax   =  1.f;
+        IMUGestureToolkit changeTracker;     // tracks value changes
     };
 
     // Dados normalizados para [-1,1] (accel/gyro); botões: 0.0 ou 1.0
@@ -122,8 +123,8 @@ public:
     void setCCOutSource  (int i, CCSource src)  { ccOut_[i].source   = src; }
     void setCCOutMSB     (int i, int msb)       { ccOut_[i].msb      = juce::jlimit (0, 31, msb); }
     void setCCOutRateHz  (int i, int hz)        { ccOut_[i].rateHz   = juce::jlimit (1, 200, hz); }
-    void setCCOut14bit   (int i, bool b)        { ccOut_[i].use14bit = b; ccOut_[i].lastVal14 = -1; }
-    void setCCOutRange   (int i, float lo, float hi) { ccOut_[i].rangeMin = lo; ccOut_[i].rangeMax = hi; ccOut_[i].lastVal14 = -1; }
+    void setCCOut14bit   (int i, bool b)        { ccOut_[i].use14bit = b; ccOut_[i].lastVal14 = -1; ccOut_[i].changeTracker.changed (-1); }
+    void setCCOutRange   (int i, float lo, float hi) { ccOut_[i].rangeMin = lo; ccOut_[i].rangeMax = hi; ccOut_[i].lastVal14 = -1; ccOut_[i].changeTracker.changed (-1); }
     bool     getCCOutEnabled  (int i) const     { return ccOut_[i].enabled; }
     CCSource getCCOutSource   (int i) const     { return ccOut_[i].source; }
     int      getCCOutMSB      (int i) const     { return ccOut_[i].msb; }
@@ -172,10 +173,10 @@ public:
                 }
             }
 
+            int    val14       = (int)(srcVal * 16383.f);
             double interval_ms = 1000.0 / cfg.rateHz;
-            int    val14 = (int)(srcVal * 16383.f);
 
-            if ((now_ms - cfg.lastSendMs) >= interval_ms && val14 != cfg.lastVal14)
+            if ((now_ms - cfg.lastSendMs) >= interval_ms && cfg.changeTracker.changed (val14))
             {
                 if (cfg.use14bit)
                     midi_handler_.sendCC14 (note_channel_, cfg.msb, srcVal);
@@ -230,32 +231,29 @@ private:
         //===============================================================================================
         float giromin_data_value = g->getB1();
 
-        if (giromin_data_value != previous_giromin_data_value_)
+        if (b1InputTracker_.changed (static_cast<int>(giromin_data_value * 1000)))
         {
             float output_value = gesture1.processButtonSignal (giromin_data_value,
                                                                IMUGestureToolkit::ButtonAction::TOGGLE);
 
             if (gesture1.changed (static_cast<int>(output_value)))
                 midi_handler_.outputMidiMessage (1, 10, (int)output_value);
-
-            previous_giromin_data_value_ = giromin_data_value;
         }
 
         //===============================================================================================
         // BUTTON ACTIONS — Note On / Note Off
         //===============================================================================================
-        auto processButtonNote = [&](float current, float& prev, int btnIdx)
+        auto processButtonNote = [&](float current, IMUGestureToolkit& tracker, int btnIdx)
         {
-            if (current == prev) return;
+            if (!tracker.changed (static_cast<int>(current * 1000))) return;
             if (current > 0.5f)
                 midi_handler_.sendNoteOn  (note_channel_, note_for_btn_[btnIdx]);
             else
                 midi_handler_.sendNoteOff (note_channel_, note_for_btn_[btnIdx]);
-            prev = current;
         };
 
-        processButtonNote (d.b1, prev_b1_raw_, 0);
-        processButtonNote (d.b2, prev_b2_raw_, 1);
+        processButtonNote (d.b1, btn1Tracker_, 0);
+        processButtonNote (d.b2, btn2Tracker_, 1);
 
         // CC output is now driven by processCCOutputs() called from timerCallback
     }
@@ -402,14 +400,13 @@ private:
     }
     
     IMUGestureToolkit gesture1, gesture2;
-    float previous_giromin_data_value_ = 0;
-    float previous_giromin_output_value_ = 0;
+    IMUGestureToolkit b1InputTracker_;   // raw B1 input change detection
+    IMUGestureToolkit btn1Tracker_;      // B1 note on/off change detection
+    IMUGestureToolkit btn2Tracker_;      // B2 note on/off change detection
 
     // Note on/off por botão
-    int   note_channel_    = 2;
-    int   note_for_btn_[2] = { 60, 62 };  // C4, D4
-    float prev_b1_raw_     = 0.f;
-    float prev_b2_raw_     = 0.f;
+    int note_channel_    = 2;
+    int note_for_btn_[2] = { 60, 62 };  // C4, D4
 
     // Up to 8 independent CC outputs
     CCOutConfig ccOut_[8];

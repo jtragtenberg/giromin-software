@@ -83,7 +83,7 @@ MainComponent::MainComponent()
     noteOutputLabel.setFont (juce::Font (juce::FontOptions().withHeight (14.f).withStyle ("Bold")));
     addAndMakeVisible (noteOutputLabel);
 
-    for (auto* l : { &midiOutLabel, &noteChLabel, &midiRateLabel_, &noteB1Label, &noteB2Label })
+    for (auto* l : { &midiOutLabel, &noteChLabel, &noteB1Label, &noteB2Label })
     {
         l->setJustificationType (juce::Justification::centredRight);
         addAndMakeVisible (l);
@@ -134,7 +134,7 @@ MainComponent::MainComponent()
     midiRateSlider_.onValueChange = [this]()
     {
         int hz = (int) midiRateSlider_.getValue();
-        for (int i = 0; i < 3; ++i)
+        for (int i = 0; i < numCCPanels_; ++i)
             giromin_controller_.setCCOutRateHz (i, hz);
         saveSettings();
     };
@@ -444,6 +444,7 @@ void MainComponent::saveSettings()
     p->setValue ("noteChannel",  giromin_controller_.getNoteChannel());
     p->setValue ("noteB1",       giromin_controller_.getNoteForButton (0));
     p->setValue ("noteB2",       giromin_controller_.getNoteForButton (1));
+    p->setValue ("midiRateHz",   (int) midiRateSlider_.getValue());
 
     p->setValue ("numCCPanels", numCCPanels_);
 
@@ -458,7 +459,6 @@ void MainComponent::saveSettings()
         p->setValue (k + "RangeMax", giromin_controller_.getCCOutRangeMax (i));
     }
 
-    p->setValue ("midiRateHz",   (int) midiRateSlider_.getValue());
     p->setValue ("eulerOrder",   eulerOrderBox_.getSelectedId());
     p->setValue ("eulerSource",  eulerSourceBox_.getSelectedId());
     p->setValue ("eulerCenter0", eulerCenter_[0]);
@@ -512,6 +512,13 @@ void MainComponent::loadSettings()
     giromin_controller_.setNoteChannel (ch);
     noteChannelBox.setSelectedId (ch, juce::dontSendNotification);
 
+    {
+        int hz = p->getIntValue ("midiRateHz", 10);
+        midiRateSlider_.setValue (hz, juce::dontSendNotification);
+        for (int i = 0; i < numCCPanels_; ++i)
+            giromin_controller_.setCCOutRateHz (i, hz);
+    }
+
     // Notes per button
     int n1 = p->getIntValue ("noteB1", 60);
     int n2 = p->getIntValue ("noteB2", 62);
@@ -563,12 +570,6 @@ void MainComponent::loadSettings()
         ccRangeKnobs_[i].setNormalizedRange (rMin, rMax);
     }
 
-    {
-        int hz = p->getIntValue ("midiRateHz", 10);
-        midiRateSlider_.setValue (hz, juce::dontSendNotification);
-        for (int i = 0; i < 3; ++i)
-            giromin_controller_.setCCOutRateHz (i, hz);
-    }
 
     eulerOrderBox_ .setSelectedId (p->getIntValue ("eulerOrder",  1), juce::dontSendNotification);
     eulerSourceBox_.setSelectedId (p->getIntValue ("eulerSource", 1), juce::dontSendNotification);
