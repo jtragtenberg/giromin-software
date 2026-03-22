@@ -37,16 +37,15 @@ public:
         bool     use14bit   = true;
         double   lastSendMs = 0.0;
         int      lastVal14  = -1;
-        float    rangeMin   = 0.f;   // input sub-range [rangeMin, rangeMax] mapped to [0,1]
-        float    rangeMax   = 1.f;
+        float    rangeMin   = -1.f;  // input sub-range [rangeMin, rangeMax] mapped to [0,1]
+        float    rangeMax   =  1.f;
     };
 
-    // Todos os dados normalizados para [0,1] conforme midi_cc_map.h
-    // Centro/repouso = 0.5 para accel e gyro; botões: 0.0 ou 1.0
+    // Dados normalizados para [-1,1] (accel/gyro); botões: 0.0 ou 1.0
     struct SensorDisplayData
     {
-        float ax = 0.5f, ay = 0.5f, az = 0.5f;
-        float gx = 0.5f, gy = 0.5f, gz = 0.5f;
+        float ax = 0.f, ay = 0.f, az = 0.f;
+        float gx = 0.f, gy = 0.f, gz = 0.f;
         float b1 = 0.f,  b2 = 0.f;
         float qw = 1.f,  qx = 0.f, qy = 0.f, qz = 0.f;
     };
@@ -147,7 +146,7 @@ public:
             auto& cfg = ccOut_[i];
             if (!cfg.enabled) continue;
 
-            float srcVal = 0.5f;
+            float srcVal = 0.f;
             switch (cfg.source)
             {
                 case CCSource::AX:     srcVal = d.ax; break;
@@ -156,9 +155,9 @@ public:
                 case CCSource::GX:     srcVal = d.gx; break;
                 case CCSource::GY:     srcVal = d.gy; break;
                 case CCSource::GZ:     srcVal = d.gz; break;
-                case CCSource::EULER1: srcVal = juce::jlimit (0.f, 1.f, (e1 + pi)       / (2.f * pi)); break;
-                case CCSource::EULER2: srcVal = juce::jlimit (0.f, 1.f, (e2 + pi)       / (2.f * pi)); break;
-                case CCSource::EULER3: srcVal = juce::jlimit (0.f, 1.f, (e3 + pi * 0.5f) / pi);         break;
+                case CCSource::EULER1: srcVal = juce::jlimit (-1.f, 1.f, e1 / pi);          break;
+                case CCSource::EULER2: srcVal = juce::jlimit (-1.f, 1.f, e2 / pi);          break;
+                case CCSource::EULER3: srcVal = juce::jlimit (-1.f, 1.f, e3 / (pi * 0.5f)); break;
             }
 
             // Apply input sub-range mapping: [rangeMin, rangeMax] → [0, 1]
@@ -195,22 +194,22 @@ private:
     {
         auto* g = getGiromin(0);
 
-        // Normaliza dado armazenado de volta para [0,1] conforme midi_cc_map.h
+        // Normaliza dado armazenado para [-1,1]
         // Encoding: midi14 = (raw_int16 + 32768) >> 2  →  range [0, 16383], centro = 8192
-        auto raw_to_01 = [](float stored, float norm_constant) -> float
+        auto raw_to_11 = [](float stored, float norm_constant) -> float
         {
             float raw_int16 = stored / norm_constant;
             float value14   = (raw_int16 + 32768.f) / 4.f;
-            return juce::jlimit (0.f, 1.f, value14 / 16383.f);
+            return juce::jlimit (-1.f, 1.f, value14 / 8191.5f - 1.f);
         };
 
         SensorDisplayData d;
-        d.ax = raw_to_01 (g->getAX(), A_NORMALISATION_CONSTANT);
-        d.ay = raw_to_01 (g->getAY(), A_NORMALISATION_CONSTANT);
-        d.az = raw_to_01 (g->getAZ(), A_NORMALISATION_CONSTANT);
-        d.gx = raw_to_01 (g->getGX(), G_NORMALISATION_CONSTANT);
-        d.gy = raw_to_01 (g->getGY(), G_NORMALISATION_CONSTANT);
-        d.gz = raw_to_01 (g->getGZ(), G_NORMALISATION_CONSTANT);
+        d.ax = raw_to_11 (g->getAX(), A_NORMALISATION_CONSTANT);
+        d.ay = raw_to_11 (g->getAY(), A_NORMALISATION_CONSTANT);
+        d.az = raw_to_11 (g->getAZ(), A_NORMALISATION_CONSTANT);
+        d.gx = raw_to_11 (g->getGX(), G_NORMALISATION_CONSTANT);
+        d.gy = raw_to_11 (g->getGY(), G_NORMALISATION_CONSTANT);
+        d.gz = raw_to_11 (g->getGZ(), G_NORMALISATION_CONSTANT);
         d.b1 = g->getB1();
         d.b2 = g->getB2();
         d.qw = g->getQ1();

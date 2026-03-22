@@ -52,13 +52,13 @@ public:
     // lo and hi may be in any order — lo > hi signals an inverted range
     void setNormalizedRange (float lo, float hi)
     {
-        rangeMin_ = juce::jlimit (0.f, 1.f, lo);
-        rangeMax_ = juce::jlimit (0.f, 1.f, hi);
+        rangeMin_ = juce::jlimit (-1.f, 1.f, lo);
+        rangeMax_ = juce::jlimit (-1.f, 1.f, hi);
         repaint();
     }
 
-    void setInputValue  (float v) { inputVal_  = juce::jlimit (0.f, 1.f, v); repaint(); }
-    void setOutputValue (float v) { outputVal_ = juce::jlimit (0.f, 1.f, v); repaint(); }
+    void setInputValue  (float v) { inputVal_  = juce::jlimit (-1.f, 1.f, v); repaint(); }
+    void setOutputValue (float v) { outputVal_ = juce::jlimit ( 0.f, 1.f, v); repaint(); }
     void setCentreLabel (const juce::String& t) { label_ = t; repaint(); }
 
     float getRangeMin() const { return rangeMin_; }
@@ -118,12 +118,12 @@ public:
                  juce::Colour (0xff333333), innerW);
 
         if (outputVal_ > 0.f)
-            drawArc (g, cx, innerR, kStartA, valToAngle (outputVal_),
+            drawArc (g, cx, innerR, kStartA, outValToAngle (outputVal_),
                      juce::Colour (0xff3377cc), innerW);
 
         // Blue ball
         {
-            auto pt = angleToScreen (valToAngle (outputVal_), innerR, cx);
+            auto pt = angleToScreen (outValToAngle (outputVal_), innerR, cx);
             g.setColour (juce::Colour (0xff66aaff));
             g.fillEllipse (pt.x - ballR, pt.y - ballR, ballR * 2.f, ballR * 2.f);
             g.setColour (juce::Colours::white.withAlpha (0.30f));
@@ -165,14 +165,14 @@ public:
         if (dragging_ < 0) return;
         float v = pointToValue (e.position);
 
-        // Snap to 0.5 (mid-output) within a small angular threshold
+        // Snap to 0.0 (center) within a small angular threshold
         static constexpr float kSnapTol = 0.025f;
-        if (std::abs (v - 0.5f) < kSnapTol) v = 0.5f;
+        if (std::abs (v) < kSnapTol) v = 0.f;
 
         if (dragging_ == 0)
-            rangeMin_ = juce::jlimit (0.f, 1.f, v);
+            rangeMin_ = juce::jlimit (-1.f, 1.f, v);
         else
-            rangeMax_ = juce::jlimit (0.f, 1.f, v);
+            rangeMax_ = juce::jlimit (-1.f, 1.f, v);
         repaint();
         if (onRangeChanged) onRangeChanged (rangeMin_, rangeMax_);
     }
@@ -181,8 +181,8 @@ public:
 
     void mouseDoubleClick (const juce::MouseEvent&) override
     {
-        setNormalizedRange (0.f, 1.f);
-        if (onRangeChanged) onRangeChanged (0.f, 1.f);
+        setNormalizedRange (-1.f, 1.f);
+        if (onRangeChanged) onRangeChanged (-1.f, 1.f);
     }
 
 private:
@@ -190,16 +190,19 @@ private:
     static constexpr float kEndA   =  juce::MathConstants<float>::pi * 0.75f;
     static constexpr float kSpan   = kEndA - kStartA;
 
-    float rangeMin_  = 0.f;
-    float rangeMax_  = 1.f;
-    float inputVal_  = 0.f;
-    float outputVal_ = 0.f;
+    float rangeMin_  = -1.f;
+    float rangeMax_  =  1.f;
+    float inputVal_  =  0.f;
+    float outputVal_ =  0.f;
     int   dragging_  = -1;
     juce::String   label_;
     juce::TextButton invertBtn_;
 
-    float valToAngle (float v) const { return kStartA + v * kSpan; }
-    float angleToVal (float a) const { return juce::jlimit (0.f, 1.f, (a - kStartA) / kSpan); }
+    // Outer arc / handles: [-1, 1] → arc angle
+    float valToAngle (float v) const { return kStartA + (v + 1.f) * 0.5f * kSpan; }
+    float angleToVal (float a) const { return juce::jlimit (-1.f, 1.f, (a - kStartA) / kSpan * 2.f - 1.f); }
+    // Inner arc: output [0, 1] → arc angle
+    float outValToAngle (float v) const { return kStartA + v * kSpan; }
 
     juce::Point<float> angleToScreen (float a, float r, juce::Point<float> cx) const
     {
