@@ -69,8 +69,10 @@ private:
     RangeKnob        ccRangeKnobs_[kMaxCCPanels];
     juce::Label      ccOutValueLabels_[kMaxCCPanels];
     juce::TextButton ccDeleteBtns_[kMaxCCPanels];
+    juce::TextButton ccCenterBtns_[kMaxCCPanels];
 
     void setupCCPanel (int i);
+    void updateCCCenterButton (int i);
     void updateCC14bitButton (int i);
     void updateCCEnableButton (int i);
     void addCCPanel();

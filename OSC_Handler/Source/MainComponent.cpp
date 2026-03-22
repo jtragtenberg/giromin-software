@@ -329,6 +329,13 @@ void MainComponent::updateCC14bitButton (int i)
                                 is14 ? juce::Colours::steelblue : juce::Colours::slategrey);
 }
 
+void MainComponent::updateCCCenterButton (int i)
+{
+    int sel = ccSourceBoxes_[i].getSelectedId() - 1; // 0-based
+    bool showCtr = (sel == 6 || sel == 7); // Euler 1 or Euler 2
+    ccCenterBtns_[i].setVisible (showCtr);
+}
+
 void MainComponent::updateCCEnableButton (int i)
 {
     bool on = ccOutEnableBtns_[i].getToggleState();
@@ -392,6 +399,7 @@ void MainComponent::setupCCPanel (int i)
         if (sel >= 0 && sel < 9)
             giromin_controller_.setCCOutSource (i, srcs[sel]);
         updateKnobLabel();
+        updateCCCenterButton (i);
         saveSettings();
     };
     updateKnobLabel();
@@ -438,6 +446,21 @@ void MainComponent::setupCCPanel (int i)
     ccDeleteBtns_[i].setColour (juce::TextButton::textColourOffId, juce::Colours::white.withAlpha (0.7f));
     ccDeleteBtns_[i].onClick = [this, i]() { removeCCPanel (i); };
     addAndMakeVisible (ccDeleteBtns_[i]);
+
+    ccCenterBtns_[i].setButtonText ("ctr");
+    ccCenterBtns_[i].setTooltip ("Set current Euler angle as center (avoids the +-pi discontinuity)");
+    ccCenterBtns_[i].onClick = [this, i]()
+    {
+        int sel = ccSourceBoxes_[i].getSelectedId() - 1; // 0-based: 6=E1, 7=E2
+        int eulerIdx = sel - 6; // 0=E1, 1=E2
+        if (eulerIdx >= 0 && eulerIdx < 2)
+        {
+            eulerCenter_[eulerIdx] = (float) eulerSliders_[eulerIdx].getValue();
+            saveSettings();
+        }
+    };
+    addAndMakeVisible (ccCenterBtns_[i]);
+    updateCCCenterButton (i);
 }
 
 void MainComponent::saveSettings()
@@ -768,6 +791,7 @@ void MainComponent::removeCCPanel (int idx)
 
         ccRangeKnobs_[i].setNormalizedRange (giromin_controller_.getCCOutRangeMin (i),
                                              giromin_controller_.getCCOutRangeMax (i));
+        updateCCCenterButton (i);
     }
 
     // Clear the last (now duplicate) slot from controller and hide its widgets
@@ -783,6 +807,7 @@ void MainComponent::removeCCPanel (int idx)
     ccRangeKnobs_[last]    .setVisible (false);
     ccOutValueLabels_[last].setVisible (false);
     ccDeleteBtns_[last]    .setVisible (false);
+    ccCenterBtns_[last]    .setVisible (false);
 
     --numCCPanels_;
     setSize (getWidth(), computeContentHeight());
@@ -1031,7 +1056,13 @@ void MainComponent::resized()
             ccDeleteBtns_[i].setBounds (row.removeFromRight (22));
         }
 
-        ccSourceBoxes_[i].setBounds (col.removeFromTop (24));
+        {
+            auto row = col.removeFromTop (24);
+            row.removeFromRight (4);
+            ccCenterBtns_[i].setBounds (row.removeFromRight (36));
+            row.removeFromRight (4);
+            ccSourceBoxes_[i].setBounds (row);
+        }
         col.removeFromTop (gap);
 
         {
