@@ -245,6 +245,19 @@ MainComponent::MainComponent()
     eulerSliders_[2].setRange (-juce::MathConstants<double>::pi / 2.0,
                                 juce::MathConstants<double>::pi / 2.0);
 
+    // ── Euler center-reset buttons (E1 and E2 only) ───────────────────────────
+    for (int i = 0; i < 2; ++i)
+    {
+        eulerCenterResetBtns_[i].setButtonText ("ctr");
+        eulerCenterResetBtns_[i].setTooltip ("Set current angle as center (avoids the +-pi discontinuity)");
+        eulerCenterResetBtns_[i].onClick = [this, i]()
+        {
+            eulerCenter_[i] = (float) eulerSliders_[i].getValue();
+            saveSettings();
+        };
+        addAndMakeVisible (eulerCenterResetBtns_[i]);
+    }
+
     // ── Yaw offset slider ────────────────────────────────────────────────────
     yawSlider_.setRange (-180.0, 180.0, 1.0);
     yawSlider_.setValue (0.0, juce::dontSendNotification);
@@ -612,6 +625,13 @@ void MainComponent::timerCallback()
             break;
     }
     auto euler = eulerFromQuat (ew, ex, ey, ez, oi);
+
+    // Apply center offset for E1 and E2: subtract offset, then wrap to [-π, π]
+    // This prevents the active range from being split by the ±π discontinuity.
+    for (int i = 0; i < 2; ++i)
+        euler[i] = std::atan2 (std::sin (euler[i] - eulerCenter_[i]),
+                               std::cos (euler[i] - eulerCenter_[i]));
+
     eulerSliders_[0].setValue (euler[0], juce::dontSendNotification);
     eulerSliders_[1].setValue (euler[1], juce::dontSendNotification);
     eulerSliders_[2].setValue (euler[2], juce::dontSendNotification);
