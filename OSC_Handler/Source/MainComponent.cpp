@@ -432,6 +432,12 @@ void MainComponent::setupCCPanel (int i)
     ccOutValueLabels_[i].setFont (juce::Font (juce::Font::getDefaultMonospacedFontName(), 13.f, juce::Font::plain));
     ccOutValueLabels_[i].setText ("---", juce::dontSendNotification);
     addAndMakeVisible (ccOutValueLabels_[i]);
+
+    ccDeleteBtns_[i].setButtonText ("x");
+    ccDeleteBtns_[i].setColour (juce::TextButton::buttonColourId, juce::Colour (0xff5a2222));
+    ccDeleteBtns_[i].setColour (juce::TextButton::textColourOffId, juce::Colours::white.withAlpha (0.7f));
+    ccDeleteBtns_[i].onClick = [this, i]() { removeCCPanel (i); };
+    addAndMakeVisible (ccDeleteBtns_[i]);
 }
 
 void MainComponent::saveSettings()
@@ -734,6 +740,57 @@ void MainComponent::addCCPanel()
     saveSettings();
 }
 
+void MainComponent::removeCCPanel (int idx)
+{
+    if (numCCPanels_ <= 1 || idx < 0 || idx >= numCCPanels_) return;
+
+    // Shift all panels above idx down by one slot
+    for (int i = idx; i < numCCPanels_ - 1; ++i)
+    {
+        // Copy controller config
+        giromin_controller_.setCCOutEnabled (i, giromin_controller_.getCCOutEnabled (i + 1));
+        giromin_controller_.setCCOutSource  (i, giromin_controller_.getCCOutSource  (i + 1));
+        giromin_controller_.setCCOutMSB     (i, giromin_controller_.getCCOutMSB     (i + 1));
+        giromin_controller_.setCCOut14bit   (i, giromin_controller_.getCCOut14bit   (i + 1));
+        giromin_controller_.setCCOutRange   (i, giromin_controller_.getCCOutRangeMin (i + 1),
+                                                giromin_controller_.getCCOutRangeMax (i + 1));
+
+        // Sync widgets from new controller state
+        ccOutEnableBtns_[i].setToggleState (giromin_controller_.getCCOutEnabled (i), juce::dontSendNotification);
+        updateCCEnableButton (i);
+
+        ccSourceBoxes_[i].setSelectedId (ccSourceBoxes_[i + 1].getSelectedId(), juce::dontSendNotification);
+
+        ccNumberBoxes_[i].setSelectedId (ccNumberBoxes_[i + 1].getSelectedId(), juce::dontSendNotification);
+
+        cc14bitBtns_[i].setToggleState (giromin_controller_.getCCOut14bit (i), juce::dontSendNotification);
+        updateCC14bitButton (i);
+
+        ccRangeKnobs_[i].setNormalizedRange (giromin_controller_.getCCOutRangeMin (i),
+                                             giromin_controller_.getCCOutRangeMax (i));
+    }
+
+    // Clear the last (now duplicate) slot from controller and hide its widgets
+    int last = numCCPanels_ - 1;
+    giromin_controller_.setCCOutEnabled (last, false);
+    giromin_controller_.setCCOutRange   (last, 0.f, 1.f);
+
+    ccOutLabels_[last]     .setVisible (false);
+    ccOutEnableBtns_[last] .setVisible (false);
+    ccSourceBoxes_[last]   .setVisible (false);
+    ccNumberBoxes_[last]   .setVisible (false);
+    cc14bitBtns_[last]     .setVisible (false);
+    ccRangeKnobs_[last]    .setVisible (false);
+    ccOutValueLabels_[last].setVisible (false);
+    ccDeleteBtns_[last]    .setVisible (false);
+
+    --numCCPanels_;
+    setSize (getWidth(), computeContentHeight());
+    resized();
+    repaint();
+    saveSettings();
+}
+
 int MainComponent::computeContentHeight() const
 {
     const int P = 10, CG = 8, rowH = 34, gap = 4;
@@ -970,6 +1027,8 @@ void MainComponent::resized()
             ccOutLabels_[i].setBounds (row.removeFromLeft (34));
             row.removeFromLeft (4);
             ccOutEnableBtns_[i].setBounds (row.removeFromLeft (46));
+            row.removeFromRight (4);
+            ccDeleteBtns_[i].setBounds (row.removeFromRight (22));
         }
 
         ccSourceBoxes_[i].setBounds (col.removeFromTop (24));

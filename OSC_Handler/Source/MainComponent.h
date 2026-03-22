@@ -58,7 +58,7 @@ private:
     juce::ComboBox noteB2Box;
 
     // ── CC Output panels (up to kMaxCCPanels) ────────────────────────────────
-    static constexpr int kMaxCCPanels = 6;
+    static constexpr int kMaxCCPanels = 8;
     int numCCPanels_ = 3;
 
     juce::Label      ccOutLabels_[kMaxCCPanels];
@@ -68,11 +68,13 @@ private:
     juce::TextButton cc14bitBtns_[kMaxCCPanels];
     RangeKnob        ccRangeKnobs_[kMaxCCPanels];
     juce::Label      ccOutValueLabels_[kMaxCCPanels];
+    juce::TextButton ccDeleteBtns_[kMaxCCPanels];
 
     void setupCCPanel (int i);
     void updateCC14bitButton (int i);
     void updateCCEnableButton (int i);
     void addCCPanel();
+    void removeCCPanel (int i);
     int  computeContentHeight() const;
 
     // ── Euler angles display ─────────────────────────────────────────────────
