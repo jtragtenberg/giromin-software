@@ -1,0 +1,4 @@
+session_id	date	time	device_id	recording_start	duration_seconds	duration_hms	total_messages	restarts	restart_times	notas
+20260407_155552	2026-04-07	15:56:11	27	15:55:52	19	00:00:19	16485	0		
+20260407_155552	2026-04-07	15:56:11	26	15:55:52	19	00:00:19	10115	0		
+20260407_155552	2026-04-07	15:56:11	25	15:55:52	19	00:00:19	10115	0		
