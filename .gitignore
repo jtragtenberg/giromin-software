@@ -1,41 +1,42 @@
-# Prerequisites
-*.d
+# ──────────────────────────────────────────────
+# JUCE / C++ (pasta Giromin/)
+# ──────────────────────────────────────────────
 
-# Compiled Object files
+# Build artifacts
+*.d
 *.slo
 *.lo
 *.o
 *.obj
-
-# Precompiled Headers
 *.gch
 *.pch
-
-# Compiled Dynamic libraries
 *.so
 *.dylib
 *.dll
-
-# Fortran module files
-*.mod
-*.smod
-
-# Compiled Static libraries
 *.lai
 *.la
 *.a
 *.lib
-
-# Executables
 *.exe
 *.out
 *.app
 
+# JUCE generated files
+Giromin/JuceLibraryCode/*
+Giromin/Builds/*
 
-.DS_Store
-.DS_STORE
+# ──────────────────────────────────────────────
+# Pure Data (pastas pd-externals/ e pd-patches/)
+# ──────────────────────────────────────────────
 
-# Audio files
+# Binários compilados dos externals (gerados pelo make)
+*.pd_darwin
+*.pd_linux
+*.pd_win32
+*.pd_win64
+*.o
+
+# Arquivos de áudio (baixar via link no README-pd.md)
 *.wav
 *.aif
 *.aiff
@@ -43,5 +44,10 @@
 *.flac
 *.ogg
 *.m4a
-Giromin/JuceLibraryCode/*
-Giromin/Builds/*
+
+# ──────────────────────────────────────────────
+# Sistema
+# ──────────────────────────────────────────────
+
+.DS_Store
+.DS_STORE
