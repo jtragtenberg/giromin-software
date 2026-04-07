@@ -6,33 +6,34 @@ O repositório tem duas implementações independentes que podem ser usadas em c
 
 ---
 
-## JUCE / C++ — Aplicação Desktop
+## `Cpp Juce/` — Aplicação Desktop
 
 Aplicação nativa com interface gráfica para receber dados do Giromin e enviar MIDI para DAWs (Ableton, Reaper, etc).
-
-**Pasta:** `Giromin/`
 
 - Recebe OSC UDP (porta 1333) ou MIDI 14-bit do Giromin
 - Converte quaternions → ângulos de Euler (6 ordens Tait-Bryan)
 - Mapeia até 8 CCs MIDI independentes (7-bit ou 14-bit)
-- Interface gráfica com sliders, visualizador 3D de quaternion
+- Interface gráfica com sliders e visualizador 3D de quaternion
 - Construído com [JUCE](https://juce.com)
 
-Documentação detalhada: [`ARCHITECTURE.md`](ARCHITECTURE.md)
+Documentação detalhada: [`Cpp Juce/ARCHITECTURE.md`](Cpp%20Juce/ARCHITECTURE.md)
 
 ---
 
-## Pure Data — Patches e Externals
+## `Pure Data/` — Patches e Externals
 
 Sistema alternativo em Pure Data para mapeamento OSC → MIDI e controle de áudio em tempo real.
 
-**Pastas:** `pd-externals/` e `pd-patches/`
+```
+Pure Data/
+├── pd-externals/   Externals C++ (giromin.euler, .map, .phase, .ema, .peak)
+└── pd-patches/     Patches prontos para uso (gesto-1 a gesto-8)
+```
 
-- Externals C++ compiláveis: `giromin.euler`, `giromin.map`, `giromin.phase`, `giromin.ema`, `giromin.peak`
-- 8 patches de gesto prontos para uso
 - Não depende do JUCE — funciona diretamente com Pure Data + ELSE library
+- Samples de áudio disponíveis em: [Google Drive](https://drive.google.com/drive/folders/1FI6EpSIjifoTRLyVYDnfXMbh4aT_9_tN?usp=sharing)
 
-Documentação detalhada: [`README-pd.md`](README-pd.md)
+Documentação detalhada: [`Pure Data/README.md`](Pure%20Data/README.md)
 
 ---
 

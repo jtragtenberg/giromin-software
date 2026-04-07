@@ -24,6 +24,8 @@
 # JUCE generated files
 Giromin/JuceLibraryCode/*
 Giromin/Builds/*
+Cpp Juce/Giromin/JuceLibraryCode/*
+Cpp Juce/Giromin/Builds/*
 
 # ──────────────────────────────────────────────
 # Pure Data (pastas pd-externals/ e pd-patches/)
