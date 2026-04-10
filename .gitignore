@@ -53,3 +53,8 @@ Cpp Juce/Giromin/Builds/*
 
 .DS_Store
 .DS_STORE
+
+# ──────────────────────────────────────────────
+# Logs de teste de bateria
+# ──────────────────────────────────────────────
+Scripts/battery-logs/*
