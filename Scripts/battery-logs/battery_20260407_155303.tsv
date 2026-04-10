@@ -1,4 +1,0 @@
-session_id	date	time	device_id	recording_start	duration_seconds	duration_hms	total_messages	restarts	restart_times
-20260407_155303	2026-04-07	15:53:14	27	15:53:03	10	00:00:10	8911	0	
-20260407_155303	2026-04-07	15:53:14	25	15:53:03	10	00:00:10	5495	0	
-20260407_155303	2026-04-07	15:53:14	26	15:53:03	10	00:00:10	5481	0	

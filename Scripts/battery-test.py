@@ -44,6 +44,7 @@ session_id      = None
 all_dead_since  = None
 session_notes   = ""
 pending_notes   = []   # lista de dicts acumulados durante a sessão
+auto_stopped    = False  # sinaliza para o frontend que parou automaticamente
 
 COLORS = ["#e74c3c","#3498db","#2ecc71","#f39c12","#9b59b6","#1abc9c","#e67e22","#e91e8c"]
 
@@ -80,8 +81,8 @@ def osc_any_handler(address, *args):
             }
         d = devices[device_id]
 
-        # Detectar reinício
-        if d["dead_since"] is not None:
+        # Detectar reinício: só conta se ficou morto por mais de RESTART_WINDOW
+        if d["dead_since"] is not None and (now - d["last_seen"]) > RESTART_WINDOW:
             d["restarts"] += 1
             d["restart_times"].append(now)
             d["dead_since"] = None
@@ -101,7 +102,7 @@ def osc_any_handler(address, *args):
 # ── Tick a cada segundo ───────────────────────────────────────────────────────
 
 def tick_loop():
-    global all_dead_since, recording, session_id
+    global all_dead_since, recording, session_id, auto_stopped
 
     while True:
         time.sleep(1)
@@ -131,6 +132,7 @@ def tick_loop():
                     if all_dead_since is None:
                         all_dead_since = now
                     elif (now - all_dead_since) >= TIMEOUT_STOP_ALL:
+                        auto_stopped = True
                         _stop_recording()
                 else:
                     all_dead_since = None
@@ -147,7 +149,8 @@ def _stop_recording():
 
 
 def _csv_path():
-    return os.path.join(LOG_DIR, f"battery_{session_id}.tsv")
+    sid = session_id or "unknown"
+    return os.path.join(LOG_DIR, f"battery_{sid}.tsv")
 
 def _save_csv():
     """Salva resultados da sessão em TSV (tab-separated)."""
@@ -169,6 +172,21 @@ def _save_csv():
             "restarts":         d["restarts"],
             "restart_times":    ";".join(datetime.fromtimestamp(t).strftime("%H:%M:%S") for t in d["restart_times"]),
             "notas":            "",
+        })
+    # Adicionar contexto da sessão como primeira linha especial
+    if session_notes:
+        rows.insert(0, {
+            "session_id":       session_id or "",
+            "date":             datetime.now().strftime("%Y-%m-%d"),
+            "time":             datetime.now().strftime("%H:%M:%S"),
+            "device_id":        "contexto",
+            "recording_start":  "",
+            "duration_seconds": "",
+            "duration_hms":     "",
+            "total_messages":   "",
+            "restarts":         "",
+            "restart_times":    "",
+            "notas":            session_notes,
         })
     all_rows = rows + pending_notes
     if not all_rows:
@@ -403,6 +421,7 @@ function editNote(i) {
 }
 
 let notesList = [];
+let canvasWidths = {};  // id → largura anterior (para evitar flickering)
 
 function renderNotesList() {
     const list = document.getElementById('notes-list');
@@ -425,10 +444,19 @@ document.addEventListener('keydown', e => {
 
 function toggleRecord() {
     if (!recording) {
-        const notes = document.getElementById('notes-input').value;
+        const ta    = document.getElementById('notes-input');
+        const notes = ta.value;
         fetch('/api/start',{method:'POST',headers:{'Content-Type':'application/json'},
             body:JSON.stringify({notes})}).then(r=>r.json()).then(d=>{
-            if (d.ok) { recording=true; recStartEpoch=d.start; notesList=[]; renderNotesList(); }
+            if (d.ok) {
+                recording=true; recStartEpoch=d.start;
+                // Preservar o conteúdo da textarea (não limpar se havia texto de contexto)
+                // só limpa se o usuário não digitou nada novo além do que virou nota de contexto
+                notesList=[]; renderNotesList();
+                // Resetar linhas de dispositivos para nova sessão
+                document.getElementById('devices').innerHTML = '';
+                canvasWidths = {};
+            }
         });
     } else {
         fetch('/api/stop',{method:'POST'}).then(r=>r.json()).then(()=>{
@@ -531,9 +559,18 @@ function drawRuler(canvas, nowEpoch, recStart) {
 // ── update loop ────────────────────────────────────────────────────────────
 function update() {
     fetch('/api/state').then(r=>r.json()).then(data => {
+        const wasRecording = recording;
         recording     = data.recording;
         recStartEpoch = data.recording_start;
         const nowEpoch = Date.now() / 1000;
+
+        // Auto-stop: mostrar aviso se parou automaticamente
+        if (wasRecording && !recording && data.auto_stopped) {
+            document.getElementById('stat-rec').textContent = '⚠️ parou automaticamente (todos desligados)';
+            document.getElementById('stat-rec').style.color = '#f39c12';
+        } else if (!recording) {
+            document.getElementById('stat-rec').style.color = '';
+        }
 
         // Botão e status global
         const btn = document.getElementById('btn-record');
@@ -577,20 +614,26 @@ function update() {
                 container.appendChild(row);
             }
 
-            // Redimensionar canvas para px reais
+            // Redimensionar canvas apenas quando a largura mudou (evita flickering)
             const wrap   = document.getElementById('wrap-' + id);
             const canvas = document.getElementById('canvas-' + id);
             const pxW    = wrap.clientWidth || 800;
-            canvas.width = pxW; canvas.height = 30;
+            if (canvasWidths[id] !== pxW) {
+                canvas.width = pxW; canvas.height = 30;
+                canvasWidths[id] = pxW;
+            }
 
             // LED
             const led = document.getElementById('led-' + id);
             led.className = 'led ' + (d.alive ? 'on' : 'off');
 
-            // Timer individual
-            const elapsed = (recording && recStartEpoch)
-                ? Math.max(0, nowEpoch - recStartEpoch) : 0;
-            document.getElementById('timer-' + id).textContent = fmtHMS(elapsed);
+            // Timer individual: usa first_seen do dispositivo, para quando morreu
+            let devElapsed = 0;
+            if (recording && d.first_seen) {
+                const endTime = d.dead_since || nowEpoch;
+                devElapsed = Math.max(0, endTime - d.first_seen);
+            }
+            document.getElementById('timer-' + id).textContent = fmtHMS(devElapsed);
 
             // Stats
             const bps = d.msgs_per_sec != null ? d.msgs_per_sec.toFixed(0) : '—';
@@ -600,16 +643,21 @@ function update() {
             drawTimeline(canvas, tl, d.color, nowEpoch, recStartEpoch);
         });
 
-        // Régua global
+        // Régua global (redimensiona só quando necessário)
         const gr = document.getElementById('ruler-global');
-        gr.width  = gr.parentElement.clientWidth || 800;
-        gr.height = 24;
+        const grW = gr.parentElement.clientWidth || 800;
+        if (gr.width !== grW) { gr.width = grW; gr.height = 24; }
         drawRuler(gr, nowEpoch, recStartEpoch);
 
-        // Logs
+        // Logs (clicáveis — abre fetch do arquivo)
         if (data.logs && data.logs.length > 0) {
             document.getElementById('log-list').innerHTML =
-                data.logs.map(l => `<div class="log-entry">${l}</div>`).join('');
+                data.logs.map(l => `<div class="log-entry">
+                    <a href="/api/log/${encodeURIComponent(l)}" target="_blank"
+                       style="color:#666;text-decoration:none;"
+                       onmouseover="this.style.color='#aaa'"
+                       onmouseout="this.style.color='#666'">${l}</a>
+                </div>`).join('');
         }
     });
 }
@@ -649,6 +697,8 @@ def api_state():
                 "msgs_per_sec": d["msgs_per_sec"],
                 "restarts":     d["restarts"],
                 "color":        d["color"],
+                "first_seen":   d.get("first_seen"),
+                "dead_since":   d["dead_since"],
             }
         tl_out = {str(did): list(tl) for did, tl in timeline.items()}
         logs   = sorted(os.listdir(LOG_DIR), reverse=True)[:10]
@@ -658,33 +708,40 @@ def api_state():
             "devices":         devs_out,
             "timeline":        tl_out,
             "logs":            logs,
+            "auto_stopped":    auto_stopped,
         })
 
 @app.route("/api/start", methods=["POST"])
 def api_start():
-    global recording, recording_start, session_id, all_dead_since, session_notes
+    global recording, recording_start, session_id, all_dead_since, session_notes, auto_stopped
     from flask import request as req
     with lock:
         if recording:
             return jsonify({"ok": False, "reason": "already recording"})
         data = req.get_json(silent=True) or {}
         session_notes = data.get("notes", "")
+        now = time.time()
         for d in devices.values():
-            d.update({"msg_count":0,"restarts":0,"restart_times":[],"dead_since":None,"msgs_per_sec":0.0})
+            d.update({"msg_count":0,"restarts":0,"restart_times":[],"dead_since":None,
+                      "msgs_per_sec":0.0,"first_seen":now})
         for did in list(timeline.keys()):
             timeline[did] = []
         bundle_this_sec.clear()
+        last_bundle_time.clear()
         pending_notes.clear()
+        auto_stopped    = False
         recording       = True
-        recording_start = time.time()
+        recording_start = now
         all_dead_since  = None
         session_id      = datetime.now().strftime("%Y%m%d_%H%M%S")
     return jsonify({"ok": True, "start": recording_start})
 
 @app.route("/api/stop", methods=["POST"])
 def api_stop():
+    global auto_stopped
     with lock:
         _stop_recording()
+        auto_stopped = False  # parada manual, não automática
     return jsonify({"ok": True})
 
 @app.route("/api/note", methods=["POST"])
@@ -698,6 +755,18 @@ def api_note():
         with lock:
             _append_note(note)
     return jsonify({"ok": True, "time": now.strftime("%H:%M:%S"), "elapsed": _fmt_hms(elapsed)})
+
+@app.route("/api/log/<path:filename>")
+def api_log(filename):
+    from flask import send_from_directory, abort
+    # Segurança: aceita apenas nomes simples (sem barras ou ..)
+    if "/" in filename or ".." in filename:
+        abort(400)
+    filepath = os.path.join(LOG_DIR, filename)
+    if not os.path.exists(filepath):
+        abort(404)
+    return send_from_directory(LOG_DIR, filename, as_attachment=False,
+                               mimetype="text/plain; charset=utf-8")
 
 @app.route("/api/note_update", methods=["POST"])
 def api_note_update():
