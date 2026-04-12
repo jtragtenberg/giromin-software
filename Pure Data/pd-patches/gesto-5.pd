@@ -1,0 +1,6 @@
+#N canvas 736 188 520 600 12;
+#X declare -lib else;
+#X declare -path ../pd-externals;
+#X text 15 10 MAPPING 5;
+#X obj 376 14 declare -lib else;
+#X obj 298 39 declare -path ../pd-externals;

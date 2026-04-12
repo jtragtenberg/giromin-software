@@ -130,34 +130,74 @@ public:
         return filtered_value_;
     }
     
-    //Untested, started implemented only
-    std::array<float, 3> convertQuaternionToEuler(float q0, float q1, float q2, float q3) {
-            // Inverter a ordem dos quaternions
-            float q0_ = q0;
-            float q1_ = q2;
-            float q2_ = q3;
-            float q3_ = q1; // z-yaw, y-pitch, x-roll
+    enum class TaitBryanOrder {
+        XYZ = 0,
+        XZY = 1,
+        YXZ = 2,
+        YZX = 3,
+        ZXY = 4,
+        ZYX = 5
+    };
 
-            // Basicamente, (0, 0, 0, 1) é um quaternion neutro
-            float neutral_q0 = 0.0f;
-            float neutral_q1 = 0.0f;
-            float neutral_q2 = 0.0f;
-            float neutral_q3 = 1.0f;
+    /**
+     * Converts a unit quaternion (w, x, y, z) to Tait-Bryan Euler angles for
+     * the requested rotation order.
+     *
+     * Returns {a_first, a_last, a_mid} where:
+     *   a_first and a_last are in [-pi, pi]  (computed with atan2)
+     *   a_mid              is in [-pi/2, pi/2] (the constrained angle, via asin)
+     *
+     * The middle angle is always the third element so callers can easily
+     * identify the gimbal-locked axis.
+     */
+    static std::array<float, 3> convertQuaternionToEuler (float w, float x, float y, float z,
+                                                           TaitBryanOrder order = TaitBryanOrder::XYZ)
+    {
+        // Rotation matrix elements
+        float xx = x*x, yy = y*y, zz = z*z;
+        float r00 = 1.f - 2.f*(yy+zz),  r01 = 2.f*(x*y - w*z),  r02 = 2.f*(x*z + w*y);
+        float r10 = 2.f*(x*y + w*z),     r11 = 1.f - 2.f*(xx+zz), r12 = 2.f*(y*z - w*x);
+        float r20 = 2.f*(x*z - w*y),     r21 = 2.f*(y*z + w*x),   r22 = 1.f - 2.f*(xx+yy);
 
-            // Multiplicar o quaternion de entrada pelo quaternion neutro
-            std::array<float, 4> resultQuat = multiplyQuaternions({q0_, q1_, q2_, q3_}, {neutral_q0, neutral_q1, neutral_q2, neutral_q3});
+        auto clamp = [](float v) { return v < -1.f ? -1.f : (v > 1.f ? 1.f : v); };
 
-            // Converter o resultado para ângulos de Euler na ordem YZK (Yaw, Pitch, Roll)
-            float yaw = std::atan2(2.f * (resultQuat[0] * resultQuat[3] + resultQuat[1] * resultQuat[2]),
-                                   1.f - 2.f * (resultQuat[2] * resultQuat[2] + resultQuat[3] * resultQuat[3]));
-
-            float pitch = std::asin(2.f * (resultQuat[0] * resultQuat[2] - resultQuat[3] * resultQuat[1]));
-
-            float roll = std::atan2(2.f * (resultQuat[0] * resultQuat[1] + resultQuat[2] * resultQuat[3]),
-                                   1.f - 2.f * (resultQuat[1] * resultQuat[1] + resultQuat[2] * resultQuat[2]));
-
-            return {yaw, pitch, roll};
+        float a_first, a_last, a_mid;
+        switch (order)
+        {
+            case TaitBryanOrder::XYZ:
+                a_mid   = std::asin  (clamp ( r02));
+                a_first = std::atan2 (-r12,  r22);
+                a_last  = std::atan2 (-r01,  r00);
+                break;
+            case TaitBryanOrder::XZY:
+                a_mid   = std::asin  (clamp (-r01));
+                a_first = std::atan2 ( r21,  r11);
+                a_last  = std::atan2 ( r02,  r00);
+                break;
+            case TaitBryanOrder::YXZ:
+                a_mid   = std::asin  (clamp (-r12));
+                a_first = std::atan2 ( r02,  r22);
+                a_last  = std::atan2 ( r10,  r11);
+                break;
+            case TaitBryanOrder::YZX:
+                a_mid   = std::asin  (clamp ( r10));
+                a_first = std::atan2 (-r20,  r00);
+                a_last  = std::atan2 (-r12,  r11);
+                break;
+            case TaitBryanOrder::ZXY:
+                a_mid   = std::asin  (clamp ( r21));
+                a_first = std::atan2 (-r01,  r11);
+                a_last  = std::atan2 (-r20,  r22);
+                break;
+            case TaitBryanOrder::ZYX:
+            default:
+                a_mid   = std::asin  (clamp (-r20));
+                a_first = std::atan2 ( r10,  r00);
+                a_last  = std::atan2 ( r21,  r22);
+                break;
         }
+        return { a_first, a_last, a_mid };
+    }
     
     // EMA Filter
     static float filterEMA (float inputValue, float filteredValue, float filteringAmount)
