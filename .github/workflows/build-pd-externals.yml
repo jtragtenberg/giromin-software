@@ -12,20 +12,11 @@ jobs:
       matrix:
         include:
           - os: macos-latest
-            pd_version: "0.56-2"
-            pd_url: "https://msp.ucsd.edu/Software/pd-0.56-2.mac.tar.gz"
-            pd_include: "/tmp/pd/src"
-            artifact_ext: "pd_darwin"
+            artifact_ext: pd_darwin
           - os: ubuntu-latest
-            pd_version: "0.56-2"
-            pd_url: "https://msp.ucsd.edu/Software/pd-0.56-2.src.tar.gz"
-            pd_include: "/tmp/pd/src"
-            artifact_ext: "pd_linux"
+            artifact_ext: pd_linux
           - os: windows-latest
-            pd_version: "0.56-2"
-            pd_url: "https://msp.ucsd.edu/Software/pd-0.56-2.msw.zip"
-            pd_include: "C:/pd/src"
-            artifact_ext: "dll"
+            artifact_ext: dll
 
     runs-on: ${{ matrix.os }}
 
@@ -34,32 +25,20 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Baixar headers do PD (macOS/Linux)
+      - name: Baixar headers do PD (source no GitHub)
         if: runner.os != 'Windows'
         run: |
+          curl -L https://github.com/pure-data/pure-data/archive/refs/tags/0.56-2.tar.gz -o /tmp/pd.tar.gz
           mkdir -p /tmp/pd-src
-          curl -L "${{ matrix.pd_url }}" -o /tmp/pd.tar.gz
           tar -xzf /tmp/pd.tar.gz -C /tmp/pd-src --strip-components=1
           mkdir -p /tmp/pd/src
-          cp /tmp/pd-src/src/*.h /tmp/pd/src/ 2>/dev/null || cp /tmp/pd-src/Contents/Resources/src/*.h /tmp/pd/src/ 2>/dev/null || true
-          # fallback: baixar só os headers via apt
-          ls /tmp/pd/src/*.h 2>/dev/null | head -3
+          cp /tmp/pd-src/src/*.h /tmp/pd/src/
 
-      - name: Instalar PD headers via apt (Linux fallback)
-        if: runner.os == 'Linux'
-        run: |
-          if [ ! -f /tmp/pd/src/m_pd.h ]; then
-            sudo apt-get update -q
-            sudo apt-get install -y puredata-dev
-            mkdir -p /tmp/pd/src
-            cp /usr/include/pd/*.h /tmp/pd/src/
-          fi
-
-      - name: Baixar PD (Windows)
+      - name: Baixar headers do PD (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          Invoke-WebRequest -Uri "${{ matrix.pd_url }}" -OutFile "C:\pd.zip"
+          Invoke-WebRequest -Uri "https://github.com/pure-data/pure-data/archive/refs/tags/0.56-2.zip" -OutFile "C:\pd.zip"
           Expand-Archive -Path "C:\pd.zip" -DestinationPath "C:\pd-extract"
           $pdDir = Get-ChildItem "C:\pd-extract" -Directory | Select-Object -First 1
           New-Item -ItemType Directory -Force -Path "C:\pd\src"
@@ -68,41 +47,35 @@ jobs:
       - name: Compilar externals (macOS/Linux)
         if: runner.os != 'Windows'
         working-directory: Pure Data/pd-externals
-        run: |
-          make PDINCLUDEDIR=/tmp/pd/src
+        run: make PDINCLUDEDIR=/tmp/pd/src
 
       - name: Compilar externals (Windows)
         if: runner.os == 'Windows'
         working-directory: Pure Data/pd-externals
         shell: cmd
-        run: |
-          make PDINCLUDEDIR="C:/pd/src"
+        run: make PDINCLUDEDIR="C:/pd/src"
 
-      - name: Coletar binários e help patches
+      - name: Coletar artefatos (macOS/Linux)
         if: runner.os != 'Windows'
-        working-directory: Pure Data/pd-externals
         run: |
-          mkdir -p ../../dist-${{ matrix.artifact_ext }}
-          cp *.pd_darwin ../../dist-${{ matrix.artifact_ext }}/ 2>/dev/null || true
-          cp *.pd_linux ../../dist-${{ matrix.artifact_ext }}/ 2>/dev/null || true
-          cp *-help.pd ../../dist-${{ matrix.artifact_ext }}/
-          cp giromin_plugdata.h ../../dist-${{ matrix.artifact_ext }}/
+          mkdir -p dist
+          cp "Pure Data/pd-externals/"*.pd_darwin dist/ 2>/dev/null || true
+          cp "Pure Data/pd-externals/"*.pd_linux  dist/ 2>/dev/null || true
+          cp "Pure Data/pd-externals/"*-help.pd   dist/
 
-      - name: Coletar binários e help patches (Windows)
+      - name: Coletar artefatos (Windows)
         if: runner.os == 'Windows'
-        working-directory: Pure Data/pd-externals
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path "../../dist-dll"
-          Copy-Item "*.dll" "../../dist-dll/" -ErrorAction SilentlyContinue
-          Copy-Item "*-help.pd" "../../dist-dll/"
-          Copy-Item "giromin_plugdata.h" "../../dist-dll/"
+          New-Item -ItemType Directory -Force -Path dist
+          Copy-Item "Pure Data\pd-externals\*.dll"     dist\ -ErrorAction SilentlyContinue
+          Copy-Item "Pure Data\pd-externals\*-help.pd" dist\
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: giromin-externals-${{ matrix.artifact_ext }}
-          path: dist-${{ matrix.artifact_ext }}/
+          path: dist/
 
   release:
     needs: build
@@ -125,7 +98,6 @@ jobs:
           for dir in */; do
             zip -r "../${dir%/}.zip" "$dir"
           done
-          ls -la ../*.zip
 
       - name: Criar Release
         uses: softprops/action-gh-release@v2
@@ -134,10 +106,12 @@ jobs:
           body: |
             ## Externals do Giromin para Pure Data / PlugData
 
-            Instale copiando a pasta para:
-            - **macOS**: `~/Library/Pd/` ou `~/Documents/PlugData/Externals/`
+            Instale copiando os arquivos para:
+            - **macOS**: `~/Documents/PlugData/Externals/Giromin/`
             - **Linux**: `~/.local/lib/pd/`
             - **Windows**: `%AppData%\Pd\` ou pasta de externals do PlugData
+
+            Depois adicione o caminho em **Settings → Paths** e reinicie.
 
             ### Objetos incluídos
             - `giromin.angulos` — converte quaternion para ângulos de Euler
@@ -150,5 +124,3 @@ jobs:
             giromin-externals-pd_darwin.zip
             giromin-externals-pd_linux.zip
             giromin-externals-dll.zip
-          draft: false
-          prerelease: false
