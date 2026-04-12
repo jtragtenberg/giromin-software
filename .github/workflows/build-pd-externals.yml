@@ -34,15 +34,19 @@ jobs:
           mkdir -p /tmp/pd/src
           cp /tmp/pd-src/src/*.h /tmp/pd/src/
 
-      - name: Baixar headers do PD (Windows)
+      - name: Baixar PD completo (Windows — precisa de pd.dll para linkar)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          Invoke-WebRequest -Uri "https://github.com/pure-data/pure-data/archive/refs/tags/0.56-2.zip" -OutFile "C:\pd.zip"
-          Expand-Archive -Path "C:\pd.zip" -DestinationPath "C:\pd-extract"
+          # Baixar instalador zip do PD para Windows
+          Invoke-WebRequest -Uri "https://github.com/pure-data/pure-data/releases/download/0.56-2/pd-0.56-2.msw.zip" -OutFile "C:\pd-msw.zip"
+          Expand-Archive -Path "C:\pd-msw.zip" -DestinationPath "C:\pd-extract"
           $pdDir = Get-ChildItem "C:\pd-extract" -Directory | Select-Object -First 1
+          # Copiar headers e pd.dll para onde pd-lib-builder espera
           New-Item -ItemType Directory -Force -Path "C:\pd\src"
-          Copy-Item "$($pdDir.FullName)\src\*.h" "C:\pd\src\"
+          New-Item -ItemType Directory -Force -Path "C:\pd\bin"
+          Copy-Item "$($pdDir.FullName)\src\*.h"   "C:\pd\src\"
+          Copy-Item "$($pdDir.FullName)\bin\pd.dll" "C:\pd\bin\"
 
       - name: Compilar externals (macOS/Linux)
         if: runner.os != 'Windows'
@@ -53,7 +57,7 @@ jobs:
         if: runner.os == 'Windows'
         working-directory: Pure Data/pd-externals
         shell: cmd
-        run: make PDINCLUDEDIR="C:/pd/src"
+        run: make PDINCLUDEDIR="C:/pd/src" PDDIR="C:/pd"
 
       - name: Coletar artefatos (macOS/Linux)
         if: runner.os != 'Windows'

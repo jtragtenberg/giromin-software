@@ -31,7 +31,12 @@ class.sources = giromin.angulos.cpp \
                 giromin.fusao.cpp
 
 # C++14 para lambdas e features modernas (não usadas aqui, mas boa prática)
+# -Wno-cast-function-type-mismatch só existe no clang 16+ (macOS); ignorar em outros compiladores
+ifeq ($(shell $(CXX) -Wno-cast-function-type-mismatch -x c++ -E - < /dev/null > /dev/null 2>&1; echo $$?),0)
 cflags += -std=c++14 -Wno-cast-function-type-mismatch
+else
+cflags += -std=c++14 -Wno-cast-function-type
+endif
 
 # Sem datafiles por enquanto
 datafiles =
