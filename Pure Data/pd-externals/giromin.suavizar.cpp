@@ -1,10 +1,10 @@
 /**
- * giromin.ema — Pure Data external
+ * giromin.suavizar — Pure Data external
  *
  * Filtro EMA (Exponential Moving Average) assimétrico.
  * Parametrizado como [slide] do Max: número de steps para atingir o alvo.
  *
- * Uso: [giromin.ema RISE FALL]
+ * Uso: [giromin.suavizar RISE FALL]
  *   RISE: steps de subida  (1 = sem filtro, 10 = ~10 steps, 100 = muito lento)
  *   FALL: steps de descida
  *   Conversão interna: alpha = 1 - 1/slide  (slide >= 1)
@@ -26,31 +26,29 @@
  *          = input/slide + filtered * (1 - 1/slide)
  *
  * Exemplos:
- *   [giromin.ema 1 1]     → pass-through (sem filtragem)
- *   [giromin.ema 1 20]    → sobe imediato, desce em ~20 steps
- *   [giromin.ema 10 10]   → suave e simétrico
+ *   [giromin.suavizar 1 1]     → pass-through (sem filtragem)
+ *   [giromin.suavizar 1 20]    → sobe imediato, desce em ~20 steps
+ *   [giromin.suavizar 10 10]   → suave e simétrico
  */
 
 #include <cmath>
 
-extern "C" {
-#include "m_pd.h"
-}
+#include "giromin_plugdata.h"
 
 /* ── classe PD ── */
-static t_class *giromin_ema_class;
+static t_class *giromin_suavizar_class;
 
-typedef struct _giromin_ema {
+typedef struct _giromin_suavizar {
     t_object x_obj;
     t_float  rise;          /* coeficiente de subida [0-1] */
     t_float  fall;          /* coeficiente de descida [0-1] */
     t_float  filtered;      /* valor filtrado atual */
     t_float  last_filtered; /* valor filtrado anterior (para detectar direção) */
     t_outlet *out;
-} t_giromin_ema;
+} t_giromin_suavizar;
 
 /* ── Handler: float de entrada ── */
-static void giromin_ema_float(t_giromin_ema *x, t_float input)
+static void giromin_suavizar_float(t_giromin_suavizar *x, t_float input)
 {
     /* Escolhe slide baseado na direção do sinal */
     t_float slide = (input > x->last_filtered) ? x->rise : x->fall;
@@ -71,17 +69,17 @@ static void giromin_ema_float(t_giromin_ema *x, t_float input)
 }
 
 /* ── Handler: reset do estado interno ── */
-static void giromin_ema_reset(t_giromin_ema *x)
+static void giromin_suavizar_reset(t_giromin_suavizar *x)
 {
     x->filtered      = 0.f;
     x->last_filtered = 0.f;
-    post("giromin.ema: estado zerado");
+    post("giromin.suavizar: estado zerado");
 }
 
 /* ── Construtor ── */
-static void *giromin_ema_new(t_floatarg rise, t_floatarg fall)
+static void *giromin_suavizar_new(t_floatarg rise, t_floatarg fall)
 {
-    t_giromin_ema *x = (t_giromin_ema *)pd_new(giromin_ema_class);
+    t_giromin_suavizar *x = (t_giromin_suavizar *)pd_new(giromin_suavizar_class);
 
     x->rise          = (rise  < 1.f) ? 1.f : rise;
     x->fall          = (fall  < 1.f) ? 1.f : fall;
@@ -98,28 +96,33 @@ static void *giromin_ema_new(t_floatarg rise, t_floatarg fall)
 }
 
 /* ── Setup ── */
-extern "C" void giromin_ema_setup(void)
+extern "C" void giromin_suavizar_setup(void)
 {
-    giromin_ema_class = class_new(
-        gensym("giromin.ema"),
-        (t_newmethod)giromin_ema_new,
+    giromin_suavizar_class = class_new(
+        gensym("giromin.suavizar"),
+        (t_newmethod)giromin_suavizar_new,
         0,                       /* sem destrutor */
-        sizeof(t_giromin_ema),
+        sizeof(t_giromin_suavizar),
         CLASS_DEFAULT,
         A_DEFFLOAT,              /* rise (default 1 = pass-through) */
         A_DEFFLOAT,              /* fall (default 1 = pass-through) */
         0
     );
 
-    class_addfloat(giromin_ema_class,
-                   (t_method)giromin_ema_float);
+    class_addfloat(giromin_suavizar_class,
+                   (t_method)giromin_suavizar_float);
 
-    class_addmethod(giromin_ema_class,
-                    (t_method)giromin_ema_reset,
+    class_addmethod(giromin_suavizar_class,
+                    (t_method)giromin_suavizar_reset,
                     gensym("reset"), A_NULL);
 
-    post("giromin.ema: filtro EMA assimetrico carregado");
+    gm_class_desc(giromin_suavizar_class, "Filtro de suavizacao assimetrico — separa velocidade de subida (rise) e descida (fall)");
+    gm_inlet_desc(giromin_suavizar_class, 0, "valor de entrada (float)");
+    gm_inlet_desc(giromin_suavizar_class, 1, "rise — steps para subir (1 = sem filtro, maior = mais lento)");
+    gm_inlet_desc(giromin_suavizar_class, 2, "fall — steps para descer (1 = sem filtro, maior = mais lento)");
+    gm_outlet_desc(giromin_suavizar_class, 0, "valor filtrado");
+    post("giromin.suavizar: filtro EMA assimetrico carregado");
 }
 
 /* Alias para PD 0.55+ que busca setup_classname com hex para '.' (0x2e) */
-extern "C" void setup_giromin0x2eema(void) { giromin_ema_setup(); }
+extern "C" void setup_giromin0x2esuavizar(void) { giromin_suavizar_setup(); }

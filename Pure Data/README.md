@@ -13,11 +13,11 @@ giromin-software/
 ├── pd-externals/          Externals C++ compiláveis
 │   ├── Makefile
 │   ├── pd-lib-builder/    (submódulo git)
-│   ├── giromin.euler.cpp  Quaternion → ângulos de Euler
-│   ├── giromin.ema.cpp    Filtro EMA assimétrico
+│   ├── giromin.angulos.cpp  Quaternion → ângulos de Euler
+│   ├── giromin.suave.cpp    Filtro EMA assimétrico
 │   ├── giromin.map.cpp    Mapeamento [-1,1] → [0,1] com autorange e invert
-│   ├── giromin.phase.cpp  Deslocamento de fase cíclica
-│   └── giromin.peak.cpp   Detector de picos locais
+│   ├── giromin.centro.cpp  Deslocamento de fase cíclica
+│   └── giromin.pico.cpp   Detector de picos locais
 │
 └── pd-patches/            Patches Pure Data
     ├── giromin.pd         Patch principal (entrada OSC, roteamento)
@@ -63,11 +63,11 @@ Os binários `.pd_darwin` (macOS) ou `.pd_linux` ficam na mesma pasta. O patch p
 
 ## Externals
 
-### `giromin.euler`
+### `giromin.angulos`
 Converte quaternion (w x y z) → 3 ângulos de Euler Tait-Bryan.
 
 ```
-[giromin.euler xyz]
+[giromin.angulos xyz]
   inlet 0:  lista "w x y z"
   outlet 0: euler_first  [-π, π]
   outlet 1: euler_last   [-π, π]
@@ -89,22 +89,22 @@ Mapeia valores para [0, 1] com range ajustável, inversão e autorange.
   outlet 2: ar_max (durante autorange)
 ```
 
-### `giromin.phase`
+### `giromin.centro`
 Desloca o centro de dados cíclicos, retornando o delta pelo caminho mais curto.
 
 ```
-[giromin.phase]          (amplitude default = 1, para dados em [-1,1])
-[giromin.phase 3.14159]  (para Euler em radianos)
+[giromin.centro]          (amplitude default = 1, para dados em [-1,1])
+[giromin.centro 3.14159]  (para Euler em radianos)
   inlet 0 (hot):  float / mensagem "center" / "center <f>"
   inlet 1 (cold): amplitude
   outlet 0: delta em [-amplitude, amplitude]
 ```
 
-### `giromin.ema`
+### `giromin.suave`
 Filtro EMA assimétrico. `slide=1` = pass-through, valores maiores = mais lento.
 
 ```
-[giromin.ema 1 20]   (rise=1 = imediato, fall=20 = ~20 steps para descer)
+[giromin.suave 1 20]   (rise=1 = imediato, fall=20 = ~20 steps para descer)
   inlet 0 (hot):  float
   inlet 1 (cold): rise (steps de subida)
   inlet 2 (cold): fall (steps de descida)
@@ -113,11 +113,11 @@ Filtro EMA assimétrico. `slide=1` = pass-through, valores maiores = mais lento.
 Mensagem: reset
 ```
 
-### `giromin.peak`
+### `giromin.pico`
 Detecta picos locais acima de um threshold. Emite o valor do pico e depois 0 após o debounce.
 
 ```
-[giromin.peak 0.5 1000]   (threshold=0.5, debounce=1000ms)
+[giromin.pico 0.5 1000]   (threshold=0.5, debounce=1000ms)
   inlet 0 (hot):  float
   inlet 1 (cold): threshold
   inlet 2 (cold): debounce_ms

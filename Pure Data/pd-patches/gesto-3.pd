@@ -61,7 +61,7 @@
 #X obj 26 68 inlet;
 #X obj 183 69 inlet;
 #X obj 26 263 outlet;
-#X obj 26 207 giromin.ema 100 622;
+#X obj 26 207 giromin.suavizar 100 622;
 #X obj 339 167 inlet;
 #X obj 391 168 inlet;
 #X obj 28 235 * 1;
@@ -163,7 +163,7 @@
 #X obj 118 508 change;
 #X obj 173 513 else/smooth 1000;
 #X obj 923 6 declare -path ../pd-externals;
-#X obj 682 133 giromin.phase;
+#X obj 682 133 giromin.centro;
 #X obj 729 807 outlet;
 #X connect 1 0 26 0;
 #X connect 4 0 5 0;

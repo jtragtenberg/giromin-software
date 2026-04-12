@@ -83,7 +83,7 @@
 #X obj 395 270 tgl 19 0 empty empty empty 0 -6 0 8 #dfdfdf #000000 #000000 0 1;
 #X obj 300 305 spigot;
 #X obj 165 183 else/initmess 100;
-#X obj 15 113 giromin.peak 0.2 100;
+#X obj 15 113 giromin.pico 0.2 100;
 #X text 292 236 --- PEGA SÓ DISPAROS (>0)---;
 #X obj 383 181 else/initmess 1;
 #X text 429 464 Ganho em db;

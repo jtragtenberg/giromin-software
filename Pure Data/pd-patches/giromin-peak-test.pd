@@ -6,7 +6,7 @@
 #X obj 15 75 hsl 200 15 0 1 0 0 empty empty empty -2 -8 0 10 #dcdcdc #000000 #000000 0 0;
 #X floatatom 225 75 8 0 1 0 - - - 0;
 #X text 15 108 --- GIROMIN.PEAK (threshold\\\, debounce ms\\\, gate ms) ---;
-#X obj 15 125 giromin.peak 0.5 100 100;
+#X obj 15 125 giromin.pico 0.5 100 100;
 #X text 15 158 --- PARAMETROS ---;
 #X text 15 175 threshold;
 #X floatatom 70 175 6 0 1 0 - - - 0;

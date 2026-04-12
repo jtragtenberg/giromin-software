@@ -1,4 +1,4 @@
-#N canvas 820 196 678 372 12;
+#N canvas 674 324 678 372 12;
 #X declare -lib else;
 #X declare -path ../pd-externals;
 #X text 15 10 GIROMIN-OSC - Receptor OSC central (porta 1333), f 48;
@@ -7,11 +7,10 @@
 #X obj 15 95 else/osc.receive 1333;
 #X obj 15 125 else/osc.route /giromin;
 #X text 15 155 --- DISPOSITIVOS ATIVOS ---, f 29;
-#X obj 15 180 giromin-device 25;
+#X obj 26 182 giromin-device 25;
 #X obj 226 127 print giromin-osc;
 #X text 14 53 Ligar o [print giromin-osc] para visualizar no console todas as mensagens OSC recebidas, f 88;
 #X obj 468 8 declare -lib else;
-#X obj 17 213 giromin-device PREENCHER;
 #X text 24 240 --- MAPEAMENTOS ATIVOS ---, f 29;
 #X text 163 180 Giromin do Braço Direito;
 #X text 207 215 Giromin do PREENCHER;
@@ -27,7 +26,7 @@
 #X obj 405 497 gesto-8 N;
 #X text 500 498 Gestos do Giromin N;
 #X text 20 270 Angulos para MIDI, f 11;
-#X text 399 271 Disparo de som com Gesto Percussivo, f 13;
+#X text 399 271 Disparo de som com Gesto Percussivo, f 16;
 #X text 279 270 Rotação Volume elevação pitch do som, f 15;
 #X text 143 271 Disparo a partir de uma altura, f 14;
 #X text 2 462 Descrever Gesto;
@@ -43,7 +42,13 @@
 #X obj 477 348 bng 15 250 10 0 empty empty empty 0 -10 0 12 #ffffff #00ff04 #000000;
 #X obj 19 372 else/scope~ 100 70 5 3 128 -1 1 0 0 0 0 32 32 32 187 187 187 159 159 159 0 empty;
 #X obj 468 31 declare -path ../pd-externals;
+#X obj 17 213 giromin-device 1;
+#X obj 390 214 giromin-visualizer 1;
 #X connect 3 0 4 0;
-#X connect 4 0 6 0;
-#X connect 17 0 35 0;
+#X connect 4 0 41 0;
+#X connect 15 0 39 0;
+#X connect 15 1 35 0;
+#X connect 16 0 34 0;
+#X connect 17 0 32 0;
 #X connect 18 0 33 0;
+#X connect 18 1 38 0;

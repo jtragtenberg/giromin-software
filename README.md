@@ -26,7 +26,7 @@ Sistema alternativo em Pure Data para mapeamento OSC → MIDI e controle de áud
 
 ```
 Pure Data/
-├── pd-externals/   Externals C++ (giromin.euler, .map, .phase, .ema, .peak)
+├── pd-externals/   Externals C++ (giromin.angulos, .map, .phase, .ema, .peak)
 └── pd-patches/     Patch pronto para uso: giromin.pd (todos os outros patches na pasta são garregados por ele)
 ```
 

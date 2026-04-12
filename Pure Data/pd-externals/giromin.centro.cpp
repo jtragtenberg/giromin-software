@@ -1,5 +1,5 @@
 /**
- * giromin.phase — Pure Data external
+ * giromin.centro — Pure Data external
  *
  * Desloca o centro (fase) de dados cíclicos, produzindo um delta no mesmo espaço.
  *
@@ -12,10 +12,10 @@
  *   Exemplo: center=0.7 → descontinuidade em -0.3.
  *   Calibre o centro na posição de repouso — o salto vai para o extremo oposto.
  *
- * Uso: [giromin.phase AMPLITUDE]
+ * Uso: [giromin.centro AMPLITUDE]
  *   AMPLITUDE: metade do período (default 1 → range [-1, 1], período 2)
- *   Para dados em [0, 360]: [giromin.phase 180]
- *   Para dados em [-π, π]: [giromin.phase 3.14159]
+ *   Para dados em [0, 360]: [giromin.centro 180]
+ *   Para dados em [-π, π]: [giromin.centro 3.14159]
  *
  * Inlet 0 (hot):
  *   float        → calcula delta cíclico em relação ao centro, emite resultado
@@ -29,11 +29,9 @@
 
 #include <cmath>
 
-extern "C" {
-#include "m_pd.h"
-}
+#include "giromin_plugdata.h"
 
-static t_class *giromin_phase_class;
+static t_class *giromin_centro_class;
 
 typedef struct {
     t_object x_obj;
@@ -41,7 +39,7 @@ typedef struct {
     t_float  center;     /* ponto zero de referência */
     t_float  amplitude;  /* metade do período (default 1) */
     t_outlet *out;
-} t_giromin_phase;
+} t_giromin_centro;
 
 /* ── Wrapper cíclico ─────────────────────────────────────────────────────────
  * Retorna a distância mais curta de val até center no espaço cíclico
@@ -55,22 +53,22 @@ static t_float cyclic_delta(t_float val, t_float center, t_float amp) {
     return d;
 }
 
-static void giromin_phase_float(t_giromin_phase *x, t_floatarg f) {
+static void giromin_centro_float(t_giromin_centro *x, t_floatarg f) {
     x->val = f;
     outlet_float(x->out, cyclic_delta(x->val, x->center, x->amplitude));
 }
 
-static void giromin_phase_center(t_giromin_phase *x, t_symbol * /*s*/,
+static void giromin_centro_center(t_giromin_centro *x, t_symbol * /*s*/,
                                   int argc, t_atom *argv) {
     x->center = (argc > 0) ? atom_getfloat(argv) : x->val;
-    post("giromin.phase: centro = %g  (descontinuidade em %g)",
+    post("giromin.centro: centro = %g  (descontinuidade em %g)",
          (double)x->center,
          (double)(x->center + (x->center >= 0.0f ? -x->amplitude : x->amplitude)));
     outlet_float(x->out, cyclic_delta(x->val, x->center, x->amplitude));
 }
 
-static void *giromin_phase_new(t_symbol * /*s*/, int argc, t_atom *argv) {
-    t_giromin_phase *x = (t_giromin_phase *)pd_new(giromin_phase_class);
+static void *giromin_centro_new(t_symbol * /*s*/, int argc, t_atom *argv) {
+    t_giromin_centro *x = (t_giromin_centro *)pd_new(giromin_centro_class);
     x->val       = 0.0f;
     x->center    = 0.0f;
     x->amplitude = (argc > 0) ? atom_getfloat(argv) : 1.0f;
@@ -81,19 +79,23 @@ static void *giromin_phase_new(t_symbol * /*s*/, int argc, t_atom *argv) {
     return x;
 }
 
-extern "C" void giromin_phase_setup(void) {
-    giromin_phase_class = class_new(
-        gensym("giromin.phase"),
-        (t_newmethod)giromin_phase_new,
-        0, sizeof(t_giromin_phase),
+extern "C" void giromin_centro_setup(void) {
+    giromin_centro_class = class_new(
+        gensym("giromin.centro"),
+        (t_newmethod)giromin_centro_new,
+        0, sizeof(t_giromin_centro),
         CLASS_DEFAULT,
         A_GIMME, A_NULL
     );
-    class_addfloat(giromin_phase_class, giromin_phase_float);
-    class_addmethod(giromin_phase_class,
-                    (t_method)giromin_phase_center,
+    class_addfloat(giromin_centro_class, giromin_centro_float);
+    class_addmethod(giromin_centro_class,
+                    (t_method)giromin_centro_center,
                     gensym("center"), A_GIMME, A_NULL);
-    post("giromin.phase: deslocamento de fase ciclica carregado");
+    gm_class_desc(giromin_centro_class, "Desloca o ponto de referencia de dados ciclicos — util para calibrar a posicao de repouso de um sensor");
+    gm_inlet_desc(giromin_centro_class, 0, "valor de entrada (float) | 'center' para capturar centro atual | 'center F' para definir explicitamente");
+    gm_inlet_desc(giromin_centro_class, 1, "amplitude — metade do periodo do dado ciclico (padrao 1 para dados em [-1, 1])");
+    gm_outlet_desc(giromin_centro_class, 0, "delta em [-amplitude, +amplitude] relativo ao centro definido");
+    post("giromin.centro: deslocamento de fase ciclica carregado");
 }
 
-extern "C" void setup_giromin0x2ephase(void) { giromin_phase_setup(); }
+extern "C" void setup_giromin0x2ecentro(void) { giromin_centro_setup(); }

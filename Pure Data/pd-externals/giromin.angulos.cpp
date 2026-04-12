@@ -1,10 +1,10 @@
 /**
- * giromin.euler — Pure Data external
+ * giromin.angulos — Pure Data external
  *
  * Converte um quaternion unitário (w x y z) para ângulos de Euler Tait-Bryan.
  * Portado diretamente de IMUGestureToolkit::convertQuaternionToEuler().
  *
- * Uso: [giromin.euler ORDER]
+ * Uso: [giromin.angulos ORDER]
  *   ORDER: xyz xzy yxz yzx zxy zyx  (default: xyz)
  *   Pode ser mudado em runtime: send "order xyz" (ou qualquer outra ordem)
  *
@@ -17,7 +17,7 @@
  *
  * Exemplos:
  *   quaternion identidade (w=1 x=0 y=0 z=0) → (0, 0, 0)
- *   Para testar no PD: [list 1 0 0 0( → [giromin.euler xyz]
+ *   Para testar no PD: [list 1 0 0 0( → [giromin.angulos xyz]
  *
  * Compilação: veja o Makefile nesta pasta
  */
@@ -25,20 +25,18 @@
 #include <cmath>
 #include <cstring>
 
-extern "C" {
-#include "m_pd.h"
-}
+#include "giromin_plugdata.h"
 
 /* ── classe PD ── */
-static t_class *giromin_euler_class;
+static t_class *giromin_angulos_class;
 
-typedef struct _giromin_euler {
+typedef struct _giromin_angulos {
     t_object x_obj;
     int      order;         /* 0=XYZ 1=XZY 2=YXZ 3=YZX 4=ZXY 5=ZYX */
     t_outlet *out_first;    /* outlet 0 (esq): a_first */
     t_outlet *out_last;     /* outlet 1 (meio): a_last */
     t_outlet *out_mid;      /* outlet 2 (dir): a_mid — eixo gimbal */
-} t_giromin_euler;
+} t_giromin_angulos;
 
 /* ── Conversão quaternion → Euler ──────────────────────────────────────────
  * Portado de IMUGestureToolkit::convertQuaternionToEuler() (sem dependência JUCE)
@@ -96,11 +94,11 @@ static void quat_to_euler(float w, float x, float y, float z, int order,
 }
 
 /* ── Handler: lista de 4 floats (w x y z) ── */
-static void giromin_euler_list(t_giromin_euler *x, t_symbol * /*s*/,
+static void giromin_angulos_list(t_giromin_angulos *x, t_symbol * /*s*/,
                                 int argc, t_atom *argv)
 {
     if (argc < 4) {
-        pd_error(x, "giromin.euler: precisa de 4 floats (w x y z)");
+        pd_error(x, "giromin.angulos: precisa de 4 floats (w x y z)");
         return;
     }
     float w  = atom_getfloat(argv);
@@ -118,7 +116,7 @@ static void giromin_euler_list(t_giromin_euler *x, t_symbol * /*s*/,
 }
 
 /* ── Handler: mudança de ordem em runtime ── */
-static void giromin_euler_order(t_giromin_euler *x, t_symbol *s)
+static void giromin_angulos_order(t_giromin_angulos *x, t_symbol *s)
 {
     const char *name = s->s_name;
     if      (strcmp(name, "xyz") == 0) x->order = 0;
@@ -127,18 +125,18 @@ static void giromin_euler_order(t_giromin_euler *x, t_symbol *s)
     else if (strcmp(name, "yzx") == 0) x->order = 3;
     else if (strcmp(name, "zxy") == 0) x->order = 4;
     else if (strcmp(name, "zyx") == 0) x->order = 5;
-    else pd_error(x, "giromin.euler: ordem desconhecida '%s' (xyz xzy yxz yzx zxy zyx)", name);
+    else pd_error(x, "giromin.angulos: ordem desconhecida '%s' (xyz xzy yxz yzx zxy zyx)", name);
 }
 
 /* ── Construtor ── */
-static void *giromin_euler_new(t_symbol *s)
+static void *giromin_angulos_new(t_symbol *s)
 {
-    t_giromin_euler *x = (t_giromin_euler *)pd_new(giromin_euler_class);
+    t_giromin_angulos *x = (t_giromin_angulos *)pd_new(giromin_angulos_class);
     x->order = 0; /* default: XYZ */
 
     /* Aplica argumento de ordem se fornecido */
     if (s && s->s_name[0] != '\0')
-        giromin_euler_order(x, s);
+        giromin_angulos_order(x, s);
 
     /* Cria outlets: esquerda → direita = first, last, mid */
     x->out_first = outlet_new(&x->x_obj, &s_float);
@@ -149,27 +147,32 @@ static void *giromin_euler_new(t_symbol *s)
 }
 
 /* ── Setup — chamado quando PD carrega o external ── */
-extern "C" void giromin_euler_setup(void)
+extern "C" void giromin_angulos_setup(void)
 {
-    giromin_euler_class = class_new(
-        gensym("giromin.euler"),
-        (t_newmethod)giromin_euler_new,
+    giromin_angulos_class = class_new(
+        gensym("giromin.angulos"),
+        (t_newmethod)giromin_angulos_new,
         0,                          /* sem destrutor */
-        sizeof(t_giromin_euler),
+        sizeof(t_giromin_angulos),
         CLASS_DEFAULT,
         A_DEFSYM,                   /* argumento de criação: ordem (opcional) */
         0
     );
 
-    class_addlist(giromin_euler_class,
-                  (t_method)giromin_euler_list);
+    class_addlist(giromin_angulos_class,
+                  (t_method)giromin_angulos_list);
 
-    class_addmethod(giromin_euler_class,
-                    (t_method)giromin_euler_order,
+    class_addmethod(giromin_angulos_class,
+                    (t_method)giromin_angulos_order,
                     gensym("order"), A_SYMBOL, 0);
 
-    post("giromin.euler: quaternion -> angulos de Euler carregado");
+    gm_class_desc(giromin_angulos_class, "Converte quaternion (w x y z) para angulos de Euler Tait-Bryan em 6 ordens possiveis");
+    gm_inlet_desc(giromin_angulos_class, 0, "lista w x y z — quaternion unitario de entrada");
+    gm_outlet_desc(giromin_angulos_class, 0, "primeiro angulo da ordem escolhida [-pi, pi]");
+    gm_outlet_desc(giromin_angulos_class, 1, "ultimo angulo da ordem escolhida [-pi, pi]");
+    gm_outlet_desc(giromin_angulos_class, 2, "angulo do meio — eixo gimbal [-pi/2, pi/2]");
+    post("giromin.angulos: quaternion -> angulos de Euler carregado");
 }
 
 /* Alias para PD 0.55+ que busca setup_classname com hex para '.' (0x2e) */
-extern "C" void setup_giromin0x2eeuler(void) { giromin_euler_setup(); }
+extern "C" void setup_giromin0x2eangulos(void) { giromin_angulos_setup(); }

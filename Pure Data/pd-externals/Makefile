@@ -23,11 +23,12 @@
 lib.name = giromin
 
 # Um binary por arquivo .cpp (giromin.euler.X e giromin.ema.X)
-class.sources = giromin.euler.cpp \
-                giromin.ema.cpp \
+class.sources = giromin.angulos.cpp \
+                giromin.suavizar.cpp \
                 giromin.map.cpp \
-                giromin.phase.cpp \
-                giromin.peak.cpp
+                giromin.centro.cpp \
+                giromin.pico.cpp \
+                giromin.fusao.cpp
 
 # C++14 para lambdas e features modernas (não usadas aqui, mas boa prática)
 cflags += -std=c++14 -Wno-cast-function-type-mismatch
