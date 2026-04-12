@@ -38,11 +38,12 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          # Baixar instalador zip do PD para Windows
-          Invoke-WebRequest -Uri "https://github.com/pure-data/pure-data/releases/download/0.56-2/pd-0.56-2.msw.zip" -OutFile "C:\pd-msw.zip"
+          # msp.ucsd.edu tem cert problemático — SkipCertificateCheck contorna isso
+          Invoke-WebRequest -SkipCertificateCheck `
+            -Uri "https://msp.ucsd.edu/Software/pd-0.56-2.msw.zip" `
+            -OutFile "C:\pd-msw.zip"
           Expand-Archive -Path "C:\pd-msw.zip" -DestinationPath "C:\pd-extract"
           $pdDir = Get-ChildItem "C:\pd-extract" -Directory | Select-Object -First 1
-          # Copiar headers e pd.dll para onde pd-lib-builder espera
           New-Item -ItemType Directory -Force -Path "C:\pd\src"
           New-Item -ItemType Directory -Force -Path "C:\pd\bin"
           Copy-Item "$($pdDir.FullName)\src\*.h"   "C:\pd\src\"
