@@ -38,7 +38,7 @@
 #X text 301 104 min-input;
 #X text 299 131 max-input;
 #X msg 206 332 invert 1;
-#X msg 373 333 center;
+#X msg 373 333 centro;
 #X obj 400 6 declare -path ../pd-externals;
 #X connect 3 0 6 0;
 #X connect 3 0 4 0;

@@ -6,8 +6,9 @@
 #X obj 15 91 hsl 200 15 -1 1 0 0 empty empty empty -2 -8 0 10 #dcdcdc #000000 #000000 0 0;
 #X floatatom 225 91 8 0 0 0 - - - 0;
 #X text 15 126 --- MENSAGENS ---;
-#X msg 15 144 center;
-#X msg 75 144 center 0;
+#X msg 15 144 centro;
+#X msg 75 144 centro 0;
+#X obj 135 144 bng 15 250 50 0 empty empty empty 17 7 0 10 #dcdcdc #000000 #000000;
 #X obj 15 179 giromin.centro;
 #X text 15 214 --- SAIDA ---;
 #X text 289 232 delta em [-amplitude\\\, amplitude];
@@ -17,7 +18,7 @@
 #X obj 4 287 cnv 3 550 3 empty empty inlets 8 12 0 13 #dcdcdc #000000 0;
 #X obj 109 295 cnv 17 3 17 empty empty 0 5 9 0 16 #dcdcdc #9c9c9c 0;
 #X text 130 295 float / msg;
-#X text 200 295 - valor de entrada | 'center' captura o centro | 'center F' define explicitamente;
+#X text 200 295 - valor de entrada | 'centro' captura o centro | 'centro F' define explicitamente;
 #X obj 109 315 cnv 17 3 17 empty empty 1 5 9 0 16 #dcdcdc #9c9c9c 0;
 #X text 130 315 float;
 #X text 200 315 - amplitude — metade do periodo ciclico (padrao 1 para dados em [-1\, 1]);
@@ -26,9 +27,10 @@
 #X text 130 353 float;
 #X text 200 353 - delta em [-amplitude\, +amplitude] relativo ao centro definido;
 #X connect 4 0 5 0;
-#X connect 4 0 9 0;
-#X connect 7 0 9 0;
-#X connect 8 0 9 0;
-#X connect 9 0 13 0;
-#X connect 13 0 14 0;
+#X connect 4 0 10 0;
+#X connect 7 0 10 0;
+#X connect 8 0 10 0;
+#X connect 9 0 10 0;
+#X connect 10 0 14 0;
+#X connect 14 0 15 0;
 
