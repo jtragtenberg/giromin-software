@@ -37,6 +37,9 @@
 #X obj 4 455 cnv 3 550 3 empty empty arguments 8 12 0 13 #dcdcdc #000000 0;
 #X text 109 463 1) float - steps de subida / rise (default: 1);
 #X text 109 478 2) float - steps de descida / fall (default: 1);
+#X obj 4 495 cnv 3 550 3 empty empty methods 8 12 0 13 #dcdcdc #000000 0;
+#X text 109 503 reset;
+#X text 200 503 - reinicia o filtro para o valor atual;
 #X connect 4 0 5 0;
 #X connect 4 0 19 0;
 #X connect 8 0 19 1;

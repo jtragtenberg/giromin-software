@@ -1,4 +1,4 @@
-#N canvas 827 239 734 904 12;
+#N canvas 827 239 734 1010 12;
 #X text 48 46 giromin.map — mapeia [in_min\\\, in_max] para [out_min\\\, out_max] com inversao e auto-range, f 80;
 #X text 48 64 Uso: [giromin.map IN_MIN IN_MAX] -> saida [0\\\,1] (padrao), f 75;
 #X text 59 449 Uso: [giromin.map IN_MIN IN_MAX OUT_MIN OUT_MAX] -> saida no range declarado, f 77;
@@ -84,6 +84,18 @@
 #X obj 109 854 cnv 17 3 17 empty empty 2 5 9 0 16 #dcdcdc #9c9c9c 0;
 #X text 130 854 float;
 #X text 200 854 - ar_max — maximo aprendido pelo autorange;
+#X obj 4 880 cnv 3 550 3 empty empty arguments 8 12 0 13 #dcdcdc #000000 0;
+#X text 109 888 1) float - in_min — limite inferior de entrada;
+#X text 109 903 2) float - in_max — limite superior de entrada;
+#X text 109 918 3) float - out_min — limite inferior de saida (default: 0);
+#X text 109 933 4) float - out_max — limite superior de saida (default: 1);
+#X obj 4 950 cnv 3 550 3 empty empty methods 8 12 0 13 #dcdcdc #000000 0;
+#X text 109 958 invert;
+#X text 200 958 - inverte a saida (out_max <-> out_min);
+#X text 109 973 autorange <f>;
+#X text 200 973 - 1 ativa aprendizado de range automatico\, 0 desativa;
+#X text 109 988 exp <f>;
+#X text 200 988 - curva exponencial: 1=linear\, >1=concavo\, 0<e<1=convexo;
 #X connect 5 0 8 0;
 #X connect 5 0 6 0;
 #X connect 8 0 34 0;

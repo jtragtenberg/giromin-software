@@ -1,4 +1,4 @@
-#N canvas 100 100 520 403 12;
+#N canvas 100 100 520 475 12;
 #X text 15 10 giromin.centro — deslocamento de fase ciclica;
 #X text 15 28 Uso: [giromin.centro AMPLITUDE] default: 1 (range [-1\\\,1]\\\, periodo 2), f 71;
 #X text 15 46 Inlet frio: amplitude. Para Euler em rad: [giromin.centro 3.14159], f 69;
@@ -26,6 +26,15 @@
 #X obj 109 353 cnv 17 3 17 empty empty 0 5 9 0 16 #dcdcdc #9c9c9c 0;
 #X text 130 353 float;
 #X text 200 353 - delta em [-amplitude\, +amplitude] relativo ao centro definido;
+#X obj 4 380 cnv 3 550 3 empty empty arguments 8 12 0 13 #dcdcdc #000000 0;
+#X text 109 388 1) float - amplitude: metade do periodo ciclico (default: 1);
+#X obj 4 415 cnv 3 550 3 empty empty methods 8 12 0 13 #dcdcdc #000000 0;
+#X text 109 423 centro;
+#X text 200 423 - captura o valor atual como novo centro;
+#X text 109 438 centro <f>;
+#X text 200 438 - define o centro explicitamente;
+#X text 109 453 bang;
+#X text 200 453 - equivalente a 'centro' (captura valor atual);
 #X connect 4 0 5 0;
 #X connect 4 0 10 0;
 #X connect 7 0 10 0;

@@ -1,4 +1,4 @@
-#N canvas 100 100 695 478 12;
+#N canvas 100 100 695 530 12;
 #X text 15 10 giromin.pico — detector de picos locais;
 #X text 15 28 Uso: [giromin.pico THRESHOLD DEBOUNCE_MS] Inlets frios: threshold (2o)\\\, debounce_ms (3o), f 91;
 #X text 15 46 Emite peak_val ao detectar pico. Emite 0 apos debounce_ms. Mensagem: reset, f 81;
@@ -30,6 +30,12 @@
 #X obj 109 428 cnv 17 3 17 empty empty 0 5 9 0 16 #dcdcdc #9c9c9c 0;
 #X text 130 428 float;
 #X text 200 428 - valor do pico na detecao; 0 apos debounce_ms;
+#X obj 4 455 cnv 3 550 3 empty empty arguments 8 12 0 13 #dcdcdc #000000 0;
+#X text 109 463 1) float - threshold: valor minimo para detectar pico (default: 0.5);
+#X text 109 478 2) float - debounce_ms: duracao do pico e bloqueio em ms (default: 200);
+#X obj 4 500 cnv 3 550 3 empty empty methods 8 12 0 13 #dcdcdc #000000 0;
+#X text 109 508 reset;
+#X text 200 508 - reinicia o detector de picos;
 #X connect 4 0 5 0;
 #X connect 4 0 16 0;
 #X connect 8 0 16 1;

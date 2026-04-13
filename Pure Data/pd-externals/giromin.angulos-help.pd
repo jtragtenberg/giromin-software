@@ -1,4 +1,4 @@
-#N canvas 100 100 520 464 12;
+#N canvas 100 100 520 510 12;
 #X text 15 10 giromin.angulos — quaternion -> angulos de Euler Tait-Bryan;
 #X text 15 28 Uso: [giromin.angulos ORDER] ORDER: xyz xzy yxz yzx zxy zyx (default: xyz), f 74;
 #X text 15 55 --- ENTRADA ---;
@@ -33,6 +33,11 @@
 #X obj 109 414 cnv 17 3 17 empty empty 2 5 9 0 16 #dcdcdc #9c9c9c 0;
 #X text 130 414 float;
 #X text 200 414 - angulo do meio — eixo gimbal [-pi/2\, pi/2];
+#X obj 4 440 cnv 3 550 3 empty empty arguments 8 12 0 13 #dcdcdc #000000 0;
+#X text 109 448 1) symbol - ordem de Euler: xyz xzy yxz yzx zxy zyx (default: xyz);
+#X obj 4 475 cnv 3 550 3 empty empty methods 8 12 0 13 #dcdcdc #000000 0;
+#X text 109 483 order <sym>;
+#X text 250 483 - muda a ordem de Euler em tempo real;
 #X connect 3 0 11 0;
 #X connect 5 0 11 0;
 #X connect 8 0 11 0;

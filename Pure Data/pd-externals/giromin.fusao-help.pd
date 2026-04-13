@@ -1,4 +1,4 @@
-#N canvas 100 100 620 596 12;
+#N canvas 100 100 620 650 12;
 #X text 15 10 giromin.fusao — fusao de sensores IMU (algoritmo de Madgwick), f 69;
 #X text 15 28 Uso: [giromin.fusao BETA] BETA: ganho do filtro (default: 0.3), f 66;
 #X text 15 50 Entrada: lista de 6 floats (gx gy gz ax ay az) em graus/s e g, f 63;
@@ -48,6 +48,13 @@
 #X obj 109 546 cnv 17 3 17 empty empty 4 5 9 0 16 #dcdcdc #9c9c9c 0;
 #X text 130 546 float;
 #X text 200 546 - z — componente z;
+#X obj 4 570 cnv 3 550 3 empty empty arguments 8 12 0 13 #dcdcdc #000000 0;
+#X text 109 578 1) float - beta: ganho do filtro Madgwick (default: 0.3);
+#X obj 4 605 cnv 3 550 3 empty empty methods 8 12 0 13 #dcdcdc #000000 0;
+#X text 109 613 reset;
+#X text 200 613 - reinicia o quaternion para identidade (1 0 0 0);
+#X text 109 628 beta <f>;
+#X text 200 628 - ajusta o ganho do filtro em tempo real;
 #X connect 5 0 16 0;
 #X connect 7 0 16 0;
 #X connect 10 0 16 0;
