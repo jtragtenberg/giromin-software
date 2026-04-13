@@ -12,11 +12,11 @@ jobs:
       matrix:
         include:
           - os: macos-latest
-            artifact_ext: pd_darwin
+            artifact_ext: mac
           - os: ubuntu-latest
-            artifact_ext: pd_linux
+            artifact_ext: linux
           - os: windows-latest
-            artifact_ext: dll
+            artifact_ext: win
 
     runs-on: ${{ matrix.os }}
 
@@ -126,6 +126,6 @@ jobs:
             - `giromin.pico` — detecta picos com debounce
             - `giromin.fusao` — fusão de sensores (Madgwick)
           files: |
-            giromin-externals-pd_darwin.zip
-            giromin-externals-pd_linux.zip
-            giromin-externals-dll.zip
+            giromin-externals-mac.zip
+            giromin-externals-linux.zip
+            giromin-externals-win.zip
