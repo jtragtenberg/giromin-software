@@ -27,7 +27,7 @@
 
 #include <cmath>
 #include <cstring>
-#include <time.h>
+#include <chrono>
 
 #include "giromin_plugdata.h"
 
@@ -243,9 +243,8 @@ static void giromin_fusao_list(t_giromin_fusao *x, t_symbol * /*s*/,
     float az = atom_getfloat(argv + 5);
 
     /* dt em segundos usando relógio real do sistema */
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    double now = ts.tv_sec + ts.tv_nsec * 1e-9;
+    using clk = std::chrono::steady_clock;
+    double now = std::chrono::duration<double>(clk::now().time_since_epoch()).count();
     float dt;
     if (x->last_time == 0.0) {
         dt = 0.01f;
