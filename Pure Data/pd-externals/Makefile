@@ -40,7 +40,7 @@ endif
 
 # Windows: linkar estaticamente as runtimes do MinGW para não depender de DLLs externas
 ifeq ($(OS),Windows_NT)
-ldflags += -static-libgcc -static-libstdc++ -static-libgfortran
+ldflags += -static-libgcc -static-libstdc++
 endif
 
 # Sem datafiles por enquanto
