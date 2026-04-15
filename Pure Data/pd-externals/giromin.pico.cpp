@@ -2,24 +2,24 @@
  * giromin.pico — Pure Data external
  *
  * Detecta picos locais e emite exatamente dois eventos por disparo:
- *   1. peak_val  — no momento da detecção do pico (note on)
- *   2. 0         — após debounce_ms (note off + libera novo pico)
+ *   outlet 0: peak_val — no momento da detecção do pico
+ *   outlet 1: 0        — após debounce_ms (libera novo pico)
  *   Entre os dois eventos: nenhum output, nenhum novo pico detectado.
  *
  * LATÊNCIA: 1 sample de controle.
  *
  * Uso: [giromin.pico THRESHOLD DEBOUNCE_MS]
  *   THRESHOLD:   valor mínimo para considerar pico (default 0.5)
- *   DEBOUNCE_MS: duração do note on e bloqueio de novos picos (default 200)
+ *   DEBOUNCE_MS: duração do bloqueio de novos picos em ms (default 200)
  *
  * Inlets:
  *   0 (hot):  float — valor de entrada
  *   1 (cold): threshold
  *   2 (cold): debounce_ms
  *
- * Outlet 0:
- *   peak_val — no momento do pico
- *   0        — após debounce_ms
+ * Outlets:
+ *   0: valor do pico no momento da detecção
+ *   1: 0 após debounce_ms
  */
 
 #include <cfloat>
@@ -36,13 +36,14 @@ typedef struct {
     t_float   debounce_ms;
     int       in_debounce;
     t_clock  *debounce_clock;
-    t_outlet *out;
+    t_outlet *out_pico;
+    t_outlet *out_zero;
 } t_giromin_pico;
 
-/* Emite note off e libera detecção — chamado após debounce_ms */
+/* Emite zero no outlet 1 e libera detecção — chamado após debounce_ms */
 static void giromin_pico_debounce_end(t_giromin_pico *x) {
     x->in_debounce = 0;
-    outlet_float(x->out, 0.0f);
+    outlet_float(x->out_zero, 0.0f);
 }
 
 static void giromin_pico_float(t_giromin_pico *x, t_floatarg f) {
@@ -51,7 +52,7 @@ static void giromin_pico_float(t_giromin_pico *x, t_floatarg f) {
             x->in_debounce = 1;
 
             t_float deb = (x->debounce_ms > 0.f) ? x->debounce_ms : 1.f;
-            outlet_float(x->out, x->val);
+            outlet_float(x->out_pico, x->val);
             clock_delay(x->debounce_clock, deb);
         }
     }
@@ -64,7 +65,7 @@ static void giromin_pico_reset(t_giromin_pico *x) {
     x->in_debounce = 0;
     x->val  = 0.f;
     x->prev = 0.f;
-    outlet_float(x->out, 0.0f);
+    outlet_float(x->out_zero, 0.0f);
 }
 
 static void *giromin_pico_new(t_symbol * /*s*/, int argc, t_atom *argv) {
@@ -79,7 +80,8 @@ static void *giromin_pico_new(t_symbol * /*s*/, int argc, t_atom *argv) {
     floatinlet_new(&x->x_obj, &x->debounce_ms);
 
     x->debounce_clock = clock_new(x, (t_method)giromin_pico_debounce_end);
-    x->out = outlet_new(&x->x_obj, &s_float);
+    x->out_pico = outlet_new(&x->x_obj, &s_float);
+    x->out_zero = outlet_new(&x->x_obj, &s_float);
     return x;
 }
 
@@ -104,7 +106,8 @@ extern "C" void giromin_pico_setup(void) {
     gm_inlet_desc(giromin_pico_class, 0, "valor de entrada (float)");
     gm_inlet_desc(giromin_pico_class, 1, "threshold — valor minimo para considerar pico (padrao 0.5)");
     gm_inlet_desc(giromin_pico_class, 2, "debounce_ms — duracao do note-on e bloqueio de novos picos em ms (padrao 200)");
-    gm_outlet_desc(giromin_pico_class, 0, "valor do pico no momento da detecao; 0 apos debounce_ms");
+    gm_outlet_desc(giromin_pico_class, 0, "valor do pico no momento da detecao");
+    gm_outlet_desc(giromin_pico_class, 1, "0 apos debounce_ms (fim do bloqueio)");
     post("giromin.pico: detector de picos carregado");
 }
 
